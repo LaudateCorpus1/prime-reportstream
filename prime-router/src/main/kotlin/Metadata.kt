@@ -20,6 +20,7 @@ import gov.cdc.prime.router.metadata.LookupTable
 import gov.cdc.prime.router.metadata.Mapper
 import gov.cdc.prime.router.metadata.Mappers
 import gov.cdc.prime.router.metadata.MiddleInitialMapper
+import gov.cdc.prime.router.metadata.NpiLookupMapper
 import gov.cdc.prime.router.metadata.NullMapper
 import gov.cdc.prime.router.metadata.Obx17Mapper
 import gov.cdc.prime.router.metadata.Obx17TypeMapper
@@ -70,7 +71,8 @@ class Metadata : Logging {
         TimestampMapper(),
         HashMapper(),
         NullMapper(),
-        LookupSenderValuesetsMapper()
+        LookupSenderValuesetsMapper(),
+        NpiLookupMapper()
     )
     private var reportStreamFilterDefinitions = listOf(
         FilterByCounty(),

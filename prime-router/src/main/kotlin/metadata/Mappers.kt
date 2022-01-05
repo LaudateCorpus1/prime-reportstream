@@ -385,6 +385,67 @@ class LookupSenderValuesetsMapper : Mapper {
 }
 
 /**
+ * The NpiLookupMapper is a specific implementation of the lookupMapper and
+ * thus no output values are present in this function. This function requires
+ * the same lookup table configuration as lookupMapper.
+ *
+ * In-schema usage:
+ * ```
+ * type: TABLE
+ * table: my-table
+ * tableColumn: my-column
+ * mapper: npiLookup(provider_id, facility_clia, sender_id)
+ * ```
+ */
+class NpiLookupMapper : Mapper {
+    override val name = "npiLookup"
+
+    override fun valueNames(element: Element, args: List<String>): List<String> {
+        if (args.isEmpty())
+            error("Schema Error: lookup mapper expected one or more args")
+        return args
+    }
+
+    override fun apply(element: Element, args: List<String>, values: List<ElementAndValue>): String? {
+        /* The table ref and column from the element that called the mapper */
+        val lookupTable = element.tableRef
+            ?: error("Schema Error: could not find table ${element.table}")
+        val lookupColumn = element.tableColumn
+            ?: error("Schema Error: no tableColumn for element ${element.name}")
+
+        /* Column names passed in via schema */
+        /* Because of the specificity here, we need args = provider_id (npi), facility_id, sender_id */
+        val npiColumn = args[0]
+        val facilityCliaColumn = args[1]
+        val senderIdColumn = args[2]
+
+        /* The values provided from the incoming row of data */
+        val npiSent = values.find { it.element.name == npiColumn }?.value ?: ""
+        val facilityCliaSent = values.find { it.element.name == facilityCliaColumn }?.value ?: ""
+        val senderIdSent = values.find { it.element.name == senderIdColumn }?.value ?: ""
+
+        /* The result stored after filtering the table */
+        var filterResult: String?
+
+        if (npiSent.isBlank()) {
+            /* Returns the lookupColumn value based on Facility_CLIA and Sender_ID where Default is true */
+            filterResult = lookupTable.FilterBuilder()
+                .equalsIgnoreCase(facilityCliaColumn, facilityCliaSent)
+                .equalsIgnoreCase(senderIdColumn, senderIdSent)
+                .equalsIgnoreCase("default", "true")
+                .findSingleResult(lookupColumn)
+        } else {
+            /* Uses NPI to lookup value */
+            filterResult = lookupTable.FilterBuilder()
+                .equalsIgnoreCase(npiColumn, npiSent)
+                .findSingleResult(lookupColumn)
+        }
+
+        return filterResult
+    }
+}
+
+/**
  * The obx8 mapper fills in OBX-8. This indicates the normalcy of OBX-5
  *
  * @See <a href=https://confluence.hl7.org/display/OO/Proposed+HHS+ELR+Submission+Guidance+using+HL7+v2+Messages#ProposedHHSELRSubmissionGuidanceusingHL7v2Messages-DeviceIdentification>HHS Submission Guidance</a>Do not use it for other fields and tables.
