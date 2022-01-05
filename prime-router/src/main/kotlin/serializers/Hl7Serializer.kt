@@ -14,10 +14,8 @@ import ca.uhn.hl7v2.parser.ModelClassFactory
 import ca.uhn.hl7v2.preparser.PreParser
 import ca.uhn.hl7v2.util.Terser
 import gov.cdc.prime.router.Element
-import gov.cdc.prime.router.ElementAndValue
 import gov.cdc.prime.router.Hl7Configuration
 import gov.cdc.prime.router.InvalidHL7Message
-import gov.cdc.prime.router.Mapper
 import gov.cdc.prime.router.Metadata
 import gov.cdc.prime.router.Report
 import gov.cdc.prime.router.ResultDetail
@@ -25,7 +23,9 @@ import gov.cdc.prime.router.Schema
 import gov.cdc.prime.router.SettingsProvider
 import gov.cdc.prime.router.Source
 import gov.cdc.prime.router.ValueSet
+import gov.cdc.prime.router.metadata.ElementAndValue
 import gov.cdc.prime.router.metadata.LookupTable
+import gov.cdc.prime.router.metadata.Mapper
 import org.apache.logging.log4j.kotlin.Logging
 import java.io.InputStream
 import java.io.OutputStream
@@ -337,8 +337,11 @@ class Hl7Serializer(
             }
 
             // Second, we process all the element raw values through mappers and defaults.
-            schema.elements.forEach {
-                mappedRows[it.name] = it.processValue(mappedRows, schema)
+            schema.elements.forEach { element ->
+                val result = element.processValue(mappedRows, schema)
+                mappedRows[element.name] = result.value ?: ""
+                errors.addAll(result.errors.map { it.detailMsg() })
+                warnings.addAll(result.warnings.map { it.detailMsg() })
             }
         } catch (e: Exception) {
             val msg = "${e.localizedMessage} ${e.stackTraceToString()}"
@@ -346,19 +349,12 @@ class Hl7Serializer(
             errors.add(msg)
         }
 
-        // Check for required fields now that we are done processing all the fields
-        schema.elements.forEach { element ->
-            if (!element.isOptional && mappedRows[element.name]!!.isBlank()) {
-                errors.add("The Value for ${element.name} for field ${element.hl7Field} is required")
-            }
-        }
-
         // convert sets to lists
         val rows = mappedRows.keys.associateWith {
             if (mappedRows[it] != null) listOf(mappedRows[it]!!) else emptyList()
         }
 
-        return RowResult(rows, errors, warnings)
+        return RowResult(rows, errors.distinct(), warnings.distinct())
     }
 
     fun readExternal(

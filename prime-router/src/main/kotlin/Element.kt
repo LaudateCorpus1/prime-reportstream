@@ -4,6 +4,7 @@ import com.google.i18n.phonenumbers.PhoneNumberUtil
 import gov.cdc.prime.router.Element.Cardinality.ONE
 import gov.cdc.prime.router.Element.Cardinality.ZERO_OR_ONE
 import gov.cdc.prime.router.metadata.LookupTable
+import gov.cdc.prime.router.metadata.Mapper
 import java.lang.Exception
 import java.text.DecimalFormat
 import java.time.DateTimeException
@@ -915,18 +916,18 @@ data class Element(
      * Determines if an element needs to use a mapper given the [elementValue].
      * @return true if a mapper needs to be run
      */
-    fun useMapper(elementValue: String): Boolean {
+    fun useMapper(elementValue: String?): Boolean {
         val overrideValue = mapperOverridesValue != null && mapperOverridesValue
-        return mapperRef != null && (overrideValue || elementValue.isBlank())
+        return mapperRef != null && (overrideValue || elementValue.isNullOrBlank())
     }
 
     /**
      * Determines if an element needs to use a default given the [elementValue].
      * @return true if a default needs to be used
      */
-    fun useDefault(elementValue: String): Boolean {
+    fun useDefault(elementValue: String?): Boolean {
         val overrideValue = defaultOverridesValue != null && defaultOverridesValue
-        return overrideValue || elementValue.isBlank()
+        return overrideValue || elementValue.isNullOrBlank()
     }
 
     /**
@@ -942,30 +943,23 @@ data class Element(
         schema: Schema,
         defaultOverrides: Map<String, String> = emptyMap(),
         index: Int = 0
-    ): String {
-        var retVal = if (allElementValues[name].isNullOrEmpty()) "" else allElementValues[name]!!
-        if (useMapper(retVal)) {
-            // This gets the requiredvalue names, then gets the value from mappedRows that has the data
-            val args = mapperArgs ?: emptyList()
-            val valueNames = mapperRef?.valueNames(this, args) ?: emptyList()
-            val valuesForMapper = valueNames.mapNotNull { elementName ->
-                if (elementName.contains("$")) {
-                    tokenizeMapperValue(elementName, index)
-                } else {
-                    val valueElement = schema.findElement(elementName)
-                    if (valueElement != null && allElementValues.containsKey(elementName) &&
-                        !allElementValues[elementName].isNullOrEmpty()
-                    ) {
-                        ElementAndValue(valueElement, allElementValues[elementName]!!)
-                    } else {
-                        null
-                    }
-                }
-            }
+    ): ElementResult {
+        var retVal = ElementResult(if (allElementValues[name].isNullOrEmpty()) "" else allElementValues[name]!!)
+        if (useMapper(retVal.value)) {
+            val result = mapperRef!!.apply(schema, this, allElementValues, index)
             // Only overwrite an existing value if the mapper returns a string
-            val value = mapperRef?.apply(this, args, valuesForMapper)
-            if (!value.isNullOrBlank()) {
-                retVal = value
+            if (!result.value.isNullOrBlank()) {
+                retVal.value = result.value
+            }
+            // Add any errors or warnings.  Use warnings as errors for required fields.
+            if (this.isOptional) {
+                retVal.warnings.addAll(result.errors)
+                retVal.warnings.addAll(result.warnings)
+            } else if (result.errors.isNotEmpty()) {
+                retVal.errors.addAll(result.errors)
+                retVal.warnings.addAll(result.warnings)
+            } else {
+                retVal.errors.addAll(result.warnings)
             }
         }
 
@@ -974,53 +968,21 @@ data class Element(
         // Normally, default values are only apply if the value is blank at this point in the code.
         // However, if the Element has defaultOverridesValue=true set, that forces this code to run.
         // todo get rid of defaultOverrides in the URL.  I think its always an empty map!
-        if (useDefault(retVal)) {
-            retVal = if (defaultOverrides.containsKey(name)) { // First the URL default is used if it exists.
+        if (useDefault(retVal.value)) {
+            retVal.value = if (defaultOverrides.containsKey(name)) { // First the URL default is used if it exists.
                 defaultOverrides[name] ?: ""
             } else if (!default.isNullOrBlank()) { // otherwise, use the default in the schema
                 default
             } else {
-                "" // Otherwise force the value to be empty/blank.
+                // Check for cardinality and force the value to be empty/blank.
+                if (retVal.value.isNullOrBlank() && !isOptional) {
+                    retVal.errors += MissingFieldMessage.new(fieldMapping)
+                }
+                ""
             }
         }
 
         return retVal
-    }
-
-    /**
-     * Populates the value of a specialized mapper token, indicated by a $ prefix
-     * @param elementName the token name
-     * @param index optional int value used with the $index token
-     */
-    fun tokenizeMapperValue(elementName: String, index: Int = 0): ElementAndValue {
-        val tokenElement = Element(elementName)
-        var retVal = ElementAndValue(tokenElement, "")
-        when {
-            elementName == "\$index" -> {
-                retVal = ElementAndValue(tokenElement, index.toString())
-            }
-            elementName == "\$currentDate" -> {
-                val currentDate = LocalDate.now().format(dateFormatter)
-                retVal = ElementAndValue(tokenElement, currentDate)
-            }
-            elementName.contains("\$mode:") -> {
-                retVal = ElementAndValue(tokenElement, extractStringValue(elementName))
-            }
-            elementName.contains("\$string:") -> {
-                retVal = ElementAndValue(tokenElement, extractStringValue(elementName))
-            }
-        }
-
-        return retVal
-    }
-
-    /**
-     * Retrieves the value of a generalized token as string (i.e. "$mode:literal" returns "literal")
-     * @param token the token
-     * @return the string value of a token
-     */
-    private fun extractStringValue(token: String): String {
-        return token.split(":")[1]
     }
 
     /**
@@ -1129,5 +1091,30 @@ data class Element(
                 else -> error("Internal Error: Invalid EI value '$value'")
             }
         }
+    }
+}
+
+/**
+ * A result for a given element with a [value] that may include [errors] or [warnings].
+ */
+data class ElementResult(
+    var value: String?,
+    val errors: MutableList<ResponseMessage> = mutableListOf(),
+    val warnings: MutableList<ResponseMessage> = mutableListOf()
+) {
+    /**
+     * Add an error [message] to the result.
+     * @return the same instance of the result
+     */
+    fun error(message: ResponseMessage) = apply {
+        errors.add(message)
+    }
+
+    /**
+     * Add a warning [message] to the result.
+     * @return the same instance of the result
+     */
+    fun warning(message: ResponseMessage) = apply {
+        warnings.add(message)
     }
 }

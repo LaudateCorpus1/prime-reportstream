@@ -1,5 +1,7 @@
 package gov.cdc.prime.router
 
+import gov.cdc.prime.router.metadata.Mapper
+import gov.cdc.prime.router.metadata.Mappers
 import org.apache.logging.log4j.kotlin.Logging
 
 /**

@@ -1,20 +1,22 @@
-package gov.cdc.prime.router
+package gov.cdc.prime.router.metadata
 
 import assertk.assertThat
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import gov.cdc.prime.router.Element
+import gov.cdc.prime.router.ElementResult
+import gov.cdc.prime.router.Metadata
+import gov.cdc.prime.router.Schema
 import gov.cdc.prime.router.common.NPIUtilities
-import gov.cdc.prime.router.metadata.LookupTable
 import java.io.ByteArrayInputStream
-import java.lang.IllegalArgumentException
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import kotlin.test.Test
 import kotlin.test.assertFails
-import kotlin.test.assertFailsWith
 import kotlin.test.fail
 
 class MapperTests {
-    private val livdPath = "./metadata/tables/LIVD-SARS-CoV-2-2021-01-20.csv"
-
     @Test
     fun `test MiddleInitialMapper`() {
         val mapper = MiddleInitialMapper()
@@ -75,186 +77,6 @@ class MapperTests {
         val elementAndValues = listOf(ElementAndValue(indexElement, "3"), ElementAndValue(index2Element, "4"))
         assertThat(mapper.valueNames(lookupElement, args)).isEqualTo(listOf("a", "b"))
         assertThat(mapper.apply(lookupElement, args, elementAndValues)).isEqualTo("y")
-    }
-
-    @Test
-    fun `test livdLookup with DeviceId`() {
-        val lookupTable = LookupTable.read(livdPath)
-        val codeElement = Element(
-            "ordered_test_code",
-            tableRef = lookupTable,
-            tableColumn = "Test Ordered LOINC Code"
-        )
-        val deviceElement = Element("device_id")
-        val mapper = LIVDLookupMapper()
-
-        // Test with a EUA
-        val ev1 = ElementAndValue(
-            deviceElement,
-            "BinaxNOW COVID-19 Ag Card Home Test_Abbott Diagnostics Scarborough, Inc._EUA"
-        )
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev1))).isEqualTo("94558-4")
-
-        // Test with a truncated device ID
-        val ev1a = ElementAndValue(deviceElement, "BinaxNOW COVID-19 Ag Card Home Test_Abb#")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev1a))).isEqualTo("94558-4")
-
-        // Test with a ID NOW device id which is has a FDA number
-        val ev2 = ElementAndValue(deviceElement, "10811877011269_DII")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev2))).isEqualTo("94534-5")
-
-        // With GUDID DI
-        val ev3 = ElementAndValue(deviceElement, "10811877011269")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev3))).isEqualTo("94534-5")
-    }
-
-    @Test
-    fun `test livdLookup with Equipment Model Name`() {
-        val lookupTable = LookupTable.read(livdPath)
-        val codeElement = Element(
-            "ordered_test_code",
-            tableRef = lookupTable,
-            tableColumn = "Test Ordered LOINC Code"
-        )
-        val modelElement = Element("equipment_model_name")
-        val mapper = LIVDLookupMapper()
-
-        // Test with a EUA
-        val ev1 = ElementAndValue(modelElement, "BinaxNOW COVID-19 Ag Card")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev1))).isEqualTo("94558-4")
-
-        // Test with a ID NOW device id
-        val ev2 = ElementAndValue(modelElement, "ID NOW")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev2))).isEqualTo("94534-5")
-
-        // Test for a device ID that has multiple rows and the same test ordered code.
-        val ev3 = ElementAndValue(modelElement, "1copy COVID-19 qPCR Multi Kit*")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev3))).isEqualTo("94531-1")
-
-        // Test for a device ID that has multiple rows and multiple test ordered codes.
-        val ev4 = ElementAndValue(modelElement, "Alinity i")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev4))).isNull()
-    }
-
-    @Test
-    fun `test livdLookup for Sofia 2`() {
-        val lookupTable = LookupTable.read("./metadata/tables/LIVD-SARS-CoV-2-2021-04-28.csv")
-        val codeElement = Element(
-            "ordered_test_code",
-            tableRef = lookupTable,
-            tableColumn = "Test Performed LOINC Long Name"
-        )
-        val modelElement = Element("equipment_model_name")
-        val testPerformedElement = Element("test_performed_code")
-        val mapper = LIVDLookupMapper()
-
-        mapper.apply(
-            codeElement,
-            emptyList(),
-            listOf(
-                ElementAndValue(modelElement, "Sofia 2 Flu + SARS Antigen FIA*"),
-                ElementAndValue(testPerformedElement, "95209-3")
-            )
-        ).let {
-            assertThat(it)
-                .equals("SARS-CoV+SARS-CoV-2 (COVID-19) Ag [Presence] in Respiratory specimen by Rapid immunoassay")
-        }
-    }
-
-    @Test
-    fun `test livdLookup supplemental table by device_id`() {
-        val lookupTable = LookupTable.read("./metadata/tables/LIVD-Supplemental-2021-06-07.csv")
-        val codeElement = Element(
-            "test_authorized_for_otc",
-            tableRef = lookupTable,
-            tableColumn = "is_otc"
-        )
-        val deviceElement = Element("device_id")
-        val mapper = LIVDLookupMapper()
-
-        // Test with an FDA device id
-        val ev1 = ElementAndValue(deviceElement, "10811877011337")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev1))).isEqualTo("N")
-
-        // Test with a truncated device ID
-        val ev1a = ElementAndValue(deviceElement, "BinaxNOW COVID-19 Ag Card 2 Home#")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev1a))).isEqualTo("Y")
-    }
-
-    @Test
-    fun `test livdLookup supplemental table by model`() {
-        val lookupTable = LookupTable.read("./metadata/tables/LIVD-Supplemental-2021-06-07.csv")
-        val codeElement = Element(
-            "test_authorized_for_otc",
-            tableRef = lookupTable,
-            tableColumn = "is_otc"
-        )
-        val deviceElement = Element("equipment_model_name")
-        val mapper = LIVDLookupMapper()
-
-        // Test with an FDA device id
-        val ev1 = ElementAndValue(deviceElement, "BinaxNOW COVID-19 Ag Card Home Test")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev1))).isEqualTo("N")
-
-        // Test with another
-        val ev1a = ElementAndValue(deviceElement, "BinaxNOW COVID-19 Ag Card 2 Home Test")
-        assertThat(mapper.apply(codeElement, emptyList(), listOf(ev1a))).isEqualTo("Y")
-    }
-
-    @Test
-    fun `test livdLookup model variation lookup`() {
-        val lookupTable = LookupTable.read("./metadata/tables/LIVD-SARS-CoV-2-2021-09-29.csv")
-        val element = Element(
-            "ordered_test_code",
-            tableRef = lookupTable,
-            tableColumn = "Test Ordered LOINC Code"
-        )
-
-        // Cue COVID-19 Test does not have an * in the table
-        var testModel = "Cue COVID-19 Test"
-        var expectedTestOrderedLoinc = "95409-9"
-        assertThat(LIVDLookupMapper.lookupByEquipmentModelName(element, testModel, emptyMap()))
-            .isEqualTo(expectedTestOrderedLoinc)
-
-        // Add an * to the end of the model name
-        assertThat(LIVDLookupMapper.lookupByEquipmentModelName(element, "$testModel*", emptyMap()))
-            .isEqualTo(expectedTestOrderedLoinc)
-
-        // Add some other character to fail the lookup
-        assertThat(LIVDLookupMapper.lookupByEquipmentModelName(element, "$testModel^", emptyMap()))
-            .isNull()
-
-        // Accula SARS-Cov-2 Test does have an * in the table
-        testModel = "Accula SARS-Cov-2 Test"
-        expectedTestOrderedLoinc = "95409-9"
-        assertThat(LIVDLookupMapper.lookupByEquipmentModelName(element, testModel, emptyMap()))
-            .isEqualTo(expectedTestOrderedLoinc)
-
-        // Add an * to the end of the model name
-        assertThat(LIVDLookupMapper.lookupByEquipmentModelName(element, "$testModel*", emptyMap()))
-            .isEqualTo(expectedTestOrderedLoinc)
-    }
-
-    @Test
-    fun `test value variation`() {
-        assertThat(LIVDLookupMapper.getValueVariation("dummy", "*")).isEqualTo("dummy*")
-        assertThat(LIVDLookupMapper.getValueVariation("dummy*", "*")).isEqualTo("dummy")
-        assertThat(LIVDLookupMapper.getValueVariation("dummy????", "???")).isEqualTo("dummy?")
-
-        assertThat(LIVDLookupMapper.getValueVariation("dummyCaSe", "CASE")).isEqualTo("dummy")
-        assertThat(LIVDLookupMapper.getValueVariation("dummyCaSe", "CASE", false)).isEqualTo("dummyCaSeCASE")
-
-        assertFailsWith<IllegalArgumentException>(
-            block = {
-                LIVDLookupMapper.getValueVariation("dummy", "")
-            }
-        )
-
-        assertFailsWith<IllegalArgumentException>(
-            block = {
-                LIVDLookupMapper.getValueVariation("", "*")
-            }
-        )
     }
 
     @Test
@@ -696,5 +518,96 @@ class MapperTests {
             ElementAndValue(lookupElement, "yas queen")
         )
         assertThat(mapper.apply(lookupElement, args, elementAndValuesUNK)).isNull()
+    }
+
+    @Test
+    fun `test tokenized value mapping`() {
+        // sending in "$index" should return the index of the row being processed
+        val elementNameIndex = "\$index"
+        val elementAndValueIndex = Mapper.tokenizeMapperValue(elementNameIndex, 3)
+        assertThat(elementAndValueIndex.value).isEqualTo("3")
+
+        // sending in "$currentDate" should return the current date of when the function was ran
+        val elementNameCurrentDate = "\$currentDate"
+        val formatter = DateTimeFormatter.ofPattern("yyyyMMdd")
+        val currentDate = LocalDate.now().format(formatter)
+        val elementAndValueCurrentDate = Mapper.tokenizeMapperValue(elementNameCurrentDate)
+        assertThat(elementAndValueCurrentDate.value).isEqualTo(currentDate)
+
+        // if nothing "parsable" comes through, the token value will be an empty string
+        val elementNameNonValidToken = "\$nonValidToken:not valid"
+        val elementAndValueNotValidToken = Mapper.tokenizeMapperValue(elementNameNonValidToken)
+        assertThat(elementAndValueNotValidToken.value).isEqualTo("")
+
+        // sending in a "mode:literal" should return just the mode, which in this case is "literal"
+        val elementNameMode = "\$mode:literal"
+        val elementAndValueMode = Mapper.tokenizeMapperValue(elementNameMode)
+        assertThat(elementAndValueMode.value).isEqualTo("literal")
+
+        // sending in a "string:someDefaultString" should return just the string that needs to be the default value,
+        // which in this case is "someDefaultString"
+        val elementNameString = "\$string:someDefaultString"
+        val elementAndValueString = Mapper.tokenizeMapperValue(elementNameString)
+        assertThat(elementAndValueString.value).isEqualTo("someDefaultString")
+    }
+
+    @Test
+    fun `get mapper arguments test`() {
+        val codeElement = Element("ordered_test_code")
+        val deviceElement = Element("device_id")
+        val schema = Schema("testSchema", "testTopic", listOf(codeElement, deviceElement))
+
+        class SomeTestMapper : Mapper {
+            override val name = "testMapper"
+
+            override fun valueNames(element: Element, args: List<String>): List<String> {
+                return args
+            }
+
+            override fun apply(
+                schema: Schema,
+                element: Element,
+                allElementValues: Map<String, String>,
+                recordIndex: Int
+            ): ElementResult {
+                return ElementResult(null)
+            }
+        }
+
+        val mapper = SomeTestMapper()
+
+        var equipmentNameElement = Element(
+            "equipment_model_name",
+            mapperArgs = listOf(codeElement.name, deviceElement.name)
+        )
+        var allElementValues = emptyMap<String, String>()
+        var values = mapper.getArgumentValues(schema, equipmentNameElement, allElementValues)
+        assertThat(values).isEmpty()
+
+        allElementValues = mapOf(codeElement.name to "somecode")
+        values = mapper.getArgumentValues(schema, equipmentNameElement, allElementValues)
+        assertThat(values.size).isEqualTo(1)
+        assertThat(values[0].element.name).isEqualTo(codeElement.name)
+        assertThat(values[0].value).isEqualTo(allElementValues[codeElement.name])
+
+        allElementValues = mapOf(codeElement.name to "somecode", deviceElement.name to "somedevice")
+        values = mapper.getArgumentValues(schema, equipmentNameElement, allElementValues)
+        assertThat(values.size).isEqualTo(2)
+
+        equipmentNameElement = Element("equipment_model_name", mapperArgs = emptyList())
+        values = mapper.getArgumentValues(schema, equipmentNameElement, allElementValues)
+        assertThat(values).isEmpty()
+
+        equipmentNameElement = Element("equipment_model_name")
+        values = mapper.getArgumentValues(schema, equipmentNameElement, allElementValues)
+        assertThat(values).isEmpty()
+
+        equipmentNameElement = Element(
+            "equipment_model_name",
+            mapperArgs = listOf("\$index")
+        )
+        values = mapper.getArgumentValues(schema, equipmentNameElement, emptyMap(), 6)
+        assertThat(values.size).isEqualTo(1)
+        assertThat(values[0].value).isEqualTo("6")
     }
 }
