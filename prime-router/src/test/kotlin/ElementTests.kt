@@ -10,6 +10,10 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.assertions.startsWith
+import io.mockk.clearMocks
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -17,7 +21,9 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFails
+import kotlin.test.assertTrue
 
 private const val dateFormat = "yyyy-MM-dd"
 
@@ -1114,5 +1120,133 @@ internal class ElementTests {
         result = elementJ.processValue(emptyMap(), schema)
         assertThat(result.errors).isNotEmpty()
         assertThat(result.warnings).isEmpty()
+    }
+
+    @Test
+    fun `test process value use of defaults for mapper`() {
+        val mockMapper = mockk<Mapper>()
+        val elementA = Element("a", mapperRef = mockMapper, mapperArgs = listOf("b"))
+        val elementB = Element("b")
+        val elementC = Element("c", mapperRef = mockMapper, mapperArgs = listOf("d"))
+        val elementD = Element("d", default = "defaultC")
+        val schema = Schema(
+            "name", "topic",
+            elements = listOf(elementA, elementB, elementC, elementD)
+        )
+        val defaultOverrides = mapOf(elementB.name to "22", elementD.name to "33")
+        val allElementValues = mapOf(elementB.name to "2", elementD.name to "3")
+
+        // Argument not in achema
+        every { mockMapper.apply(any(), any(), any()) } returns ElementResult(null)
+        every { mockMapper.valueNames(any(), any()) } returns listOf("someothervalue")
+        elementA.processValue(emptyMap(), schema)
+        verify(exactly = 1) {
+            mockMapper.apply(any(), any(), emptyList())
+        }
+
+        // Argument has no value or defaults
+        clearMocks(mockMapper)
+        every { mockMapper.apply(any(), any(), any()) } returns ElementResult(null)
+        every { mockMapper.valueNames(any(), any()) } returns elementA.mapperArgs!!
+        elementA.processValue(emptyMap(), schema)
+        verify(exactly = 1) {
+            mockMapper.apply(any(), any(), emptyList())
+        }
+
+        // Argument has no value, but has default override
+        clearMocks(mockMapper)
+        every { mockMapper.apply(any(), any(), any()) } returns ElementResult(null)
+        every { mockMapper.valueNames(any(), any()) } returns elementA.mapperArgs!!
+        elementA.processValue(emptyMap(), schema, defaultOverrides)
+        verify(exactly = 1) {
+            mockMapper.apply(
+                any(), any(),
+                withArg {
+                    assertTrue(it.isNotEmpty())
+                    assertEquals(elementB, it[0].element)
+                    assertEquals(defaultOverrides[elementB.name], it[0].value)
+                }
+            )
+        }
+
+        // Argument has a value, so default override is not used
+        clearMocks(mockMapper)
+        every { mockMapper.apply(any(), any(), any()) } returns ElementResult(null)
+        every { mockMapper.valueNames(any(), any()) } returns elementA.mapperArgs!!
+        elementA.processValue(allElementValues, schema, defaultOverrides)
+        verify(exactly = 1) {
+            mockMapper.apply(
+                any(), any(),
+                withArg {
+                    assertTrue(it.isNotEmpty())
+                    assertEquals(elementB, it[0].element)
+                    assertEquals(allElementValues[elementB.name], it[0].value)
+                }
+            )
+        }
+
+        // Argument has value and no defaults.
+        clearMocks(mockMapper)
+        every { mockMapper.apply(any(), any(), any()) } returns ElementResult(null)
+        every { mockMapper.valueNames(any(), any()) } returns elementA.mapperArgs!!
+        elementA.processValue(allElementValues, schema)
+        verify(exactly = 1) {
+            mockMapper.apply(
+                any(), any(),
+                withArg {
+                    assertTrue(it.isNotEmpty())
+                    assertEquals(elementB, it[0].element)
+                    assertEquals(allElementValues[elementB.name], it[0].value)
+                }
+            )
+        }
+
+        // Argument has value and element default.
+        clearMocks(mockMapper)
+        every { mockMapper.apply(any(), any(), any()) } returns ElementResult(null)
+        every { mockMapper.valueNames(any(), any()) } returns elementC.mapperArgs!!
+        elementC.processValue(allElementValues, schema)
+        verify(exactly = 1) {
+            mockMapper.apply(
+                any(), any(),
+                withArg {
+                    assertTrue(it.isNotEmpty())
+                    assertEquals(elementD, it[0].element)
+                    assertEquals(allElementValues[elementD.name], it[0].value)
+                }
+            )
+        }
+
+        // Argument has no value and element default.
+        clearMocks(mockMapper)
+        every { mockMapper.apply(any(), any(), any()) } returns ElementResult(null)
+        every { mockMapper.valueNames(any(), any()) } returns elementC.mapperArgs!!
+        elementC.processValue(emptyMap(), schema)
+        verify(exactly = 1) {
+            mockMapper.apply(
+                any(), any(),
+                withArg {
+                    assertTrue(it.isNotEmpty())
+                    assertEquals(elementD, it[0].element)
+                    assertEquals(elementD.default, it[0].value)
+                }
+            )
+        }
+
+        // Argument has no value and element default, but also has default override.
+        clearMocks(mockMapper)
+        every { mockMapper.apply(any(), any(), any()) } returns ElementResult(null)
+        every { mockMapper.valueNames(any(), any()) } returns elementC.mapperArgs!!
+        elementC.processValue(emptyMap(), schema, defaultOverrides)
+        verify(exactly = 1) {
+            mockMapper.apply(
+                any(), any(),
+                withArg {
+                    assertTrue(it.isNotEmpty())
+                    assertEquals(elementD, it[0].element)
+                    assertEquals(defaultOverrides[elementD.name], it[0].value)
+                }
+            )
+        }
     }
 }

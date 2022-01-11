@@ -970,12 +970,15 @@ data class Element(
                     tokenizeMapperValue(elementName, index)
                 } else {
                     val valueElement = schema.findElement(elementName)
-                    if (valueElement != null && allElementValues.containsKey(elementName) &&
-                        !allElementValues[elementName].isNullOrEmpty()
-                    ) {
-                        ElementAndValue(valueElement, allElementValues[elementName]!!)
-                    } else {
-                        null
+                    when {
+                        valueElement == null -> null
+                        !allElementValues[elementName].isNullOrBlank() ->
+                            ElementAndValue(valueElement, allElementValues[elementName]!!)
+                        !defaultOverrides[elementName].isNullOrBlank() ->
+                            ElementAndValue(valueElement, defaultOverrides[elementName]!!)
+                        !valueElement.default.isNullOrBlank() ->
+                            ElementAndValue(valueElement, valueElement.default)
+                        else -> null
                     }
                 }
             }
