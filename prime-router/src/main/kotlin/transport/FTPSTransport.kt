@@ -20,6 +20,7 @@ import org.apache.commons.net.ftp.FTPSClient
 import org.apache.commons.net.io.CopyStreamException
 import org.apache.commons.net.util.TrustManagerUtils
 import org.apache.logging.log4j.kotlin.Logging
+import org.apache.logging.log4j.kotlin.logger
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -118,6 +119,7 @@ class FTPSTransport : ITransport, Logging {
 
             val ftpsClient = FTPSClient(protocol.toString())
             ftpsClient.addProtocolCommandListener(PrintCommandListener(PrintWriter(System.out)))
+            val logger = logger()
             try {
 
                 if (acceptAllCerts) {
@@ -162,19 +164,17 @@ class FTPSTransport : ITransport, Logging {
                     ftpsClient.setFileType(FTP.BINARY_FILE_TYPE)
                 }
             } catch (e: FTPConnectionClosedException) {
-                context.logger.info("FTPS connection died while exchanging credentials")
-                e.printStackTrace()
+                logger.warn("FTPS connection died while exchanging credentials", e)
             } catch (e: IOException) {
                 if (ftpsClient.isConnected) {
                     try {
-                        println("Closing connection due to exception")
+                        logger.warn("Closing connection due to exception")
                         ftpsClient.disconnect()
                     } catch (f: IOException) {
                         // do nothing
                     }
                 }
-                System.err.println("Could not connect to server.")
-                e.printStackTrace()
+                logger.warn("Could not connect to server", e)
             }
             return ftpsClient
         }
@@ -191,17 +191,13 @@ class FTPSTransport : ITransport, Logging {
                 val fileInputStream: InputStream = ByteArrayInputStream(contents)
                 return ftpsClient.storeFile(fileName, fileInputStream)
             } catch (e: FTPConnectionClosedException) {
-                println("Server closed connection.")
-                e.printStackTrace()
+                logger().warn("Server closed connection", e)
             } catch (e: CopyStreamException) {
-                println("Error while transferring file to FTPS server")
-                e.printStackTrace()
+                logger().warn("Error while transferring file to FTPS server", e)
             } catch (e: IOException) {
-                println("IOException")
-                e.printStackTrace()
+                logger().warn("IOException", e)
             } catch (e: Exception) {
-                println("General exception")
-                e.printStackTrace()
+                logger().warn("General exception", e)
             }
             return false
         }
