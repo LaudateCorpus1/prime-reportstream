@@ -144,7 +144,7 @@
         "react-scripts": "^4.0.3",
         "sass": "^1.45.2",
         "stylelint": "^14.2.0",
-        "yaml-loader": "^0.6.0"
+        "yaml-loader": "^0.8.0"
     },
     "peerDependencies": {
         "follow-redirects": "^1.14.8",
