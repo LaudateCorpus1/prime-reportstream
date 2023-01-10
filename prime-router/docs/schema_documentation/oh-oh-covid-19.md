@@ -1,7 +1,7 @@
 
 ### Schema: oh/oh-covid-19
 ### Topic: covid-19
-### Tracking Element: none
+### Tracking Element: (message_id)
 ### Base On: [covid-19](./covid-19.md)
 ### Extends: none
 #### Description: A schema for OH DOH to receive HL7 files
@@ -91,11 +91,9 @@ This field is generated based on the normalcy status of the result. A = abnormal
 
 **ReportStream Internal Name**: comment_source
 
-**Type**: CODE
+**Type**: ID
 
 **PII**: No
-
-**Format**: use value found in the Code column
 
 **Cardinality**: [0..1]
 
@@ -309,7 +307,7 @@ Is the patient employed in health care?
 
 **ReportStream Internal Name**: file_created_date
 
-**Type**: DATE
+**Type**: DATETIME
 
 **PII**: No
 
@@ -494,7 +492,7 @@ unique id to track the usage of the message
 
 **PII**: No
 
-**Default Value**: PHLabReport-NoAck^ELR_Receiver^2.16.840.1.113883.9.11^ISO
+**Default Value**: PHLabReport-NoAck
 
 **Cardinality**: [0..1]
 
@@ -508,11 +506,11 @@ The message profile identifer
 
 **ReportStream Internal Name**: observation_result_status
 
-**Type**: CODE
+**Type**: ID
 
 **PII**: No
 
-**Format**: use value found in the Code column
+**Default Value**: F
 
 **Cardinality**: [0..1]
 
@@ -539,11 +537,11 @@ X|Results cannot be obtained for this observation|HL7
 
 **ReportStream Internal Name**: order_result_status
 
-**Type**: CODE
+**Type**: ID
 
 **PII**: No
 
-**Format**: use value found in the Code column
+**Default Value**: F
 
 **Cardinality**: [0..1]
 
@@ -1056,7 +1054,7 @@ The zip code of the provider
 
 **Type**: NUMBER
 
-**PII**: No
+**PII**: Yes
 
 **LOINC Code**: 30525-0
 
@@ -2623,6 +2621,9 @@ Code | Display | System
 29092000|Venous structure (body structure)|SNOMED_CT
 123851003|Mouth region structure (body structure)|SNOMED_CT
 31389004|Oropharyngeal structure (body structure)|SNOMED_CT
+39607008|Lung structure (body structure)|SNOMED_CT
+955009|Bronchial structure (body structure)|SNOMED_CT
+1797002|Structure of anterior nares (body structure)|SNOMED_CT
 
 **Documentation**:
 
@@ -2664,6 +2665,10 @@ Code | Display | System
 122555007|Venous blood specimen|SNOMED_CT
 119297000|Blood specimen|SNOMED_CT
 122554006|Capillary blood specimen|SNOMED_CT
+258467004|Nasopharyngeal washings|SNOMED_CT
+418932006|Oral swab specimen|SNOMED_CT
+433801000124107|Nasopharyngeal and oropharyngeal swab|SNOMED_CT
+309171007|Lower respiratory fluid sample|SNOMED_CT
 
 **Documentation**:
 
@@ -2853,11 +2858,6 @@ The result of the test performed. For IgG, IgM and CT results that give a numeri
 **PII**: No
 
 **Format**: use value found in the Code column
-
-**HL7 Fields**
-
-- [OBR-25-1](https://hl7-definition.caristix.com/v2/HL7v2.5.1/Fields/OBR.25.1)
-- [OBX-11-1](https://hl7-definition.caristix.com/v2/HL7v2.5.1/Fields/OBX.11.1)
 
 **Cardinality**: [0..1]
 

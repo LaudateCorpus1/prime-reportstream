@@ -1,0 +1,211 @@
+# mother's maiden name https://www.hl7.org/fhir/extension-patient-mothersmaidenname.html
+- id: "mothersMaidenName"
+  url: "http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName"
+# birthPlace
+- id: "birthPlace"
+  url: "http://hl7.org/fhir/StructureDefinition/patient-birthPlace"
+# birthTime
+- id: "birthTime"
+  url: "http://hl7.org/fhir/StructureDefinition/patient-birthTime"
+# religion
+- id: "religion"
+  url: "http://hl7.org/fhir/StructureDefinition/patient-religion"
+# race
+- id: "race"
+  url: "http://ibm.com/fhir/cdm/StructureDefinition/local-race-cd"
+# process-client-id
+- id: "process-client-id"
+  url: "http://ibm.com/fhir/cdm/StructureDefinition/process-client-id"
+# source-data-model-version
+- id: "source-data-model-version"
+  url:  "http://ibm.com/fhir/cdm/StructureDefinition/source-data-model-version"
+# source-event-timestamp
+- id: "source-event-timestamp"
+  url: "http://ibm.com/fhir/cdm/StructureDefinition/source-event-timestamp"
+# source-record-id
+- id: "source-record-id"
+  url: "http://ibm.com/fhir/cdm/StructureDefinition/source-record-id"
+# source-event-trigger
+- id: "source-event-trigger"
+  url: "http://ibm.com/fhir/cdm/StructureDefinition/source-event-trigger"
+# source-record-type
+- id: "source-record-type"
+  url: "http://ibm.com/fhir/cdm/StructureDefinition/source-record-type"
+# condition-assertedDate
+- id: "condition-assertedDate"
+  url: "http://hl7.org/fhir/StructureDefinition/condition-assertedDate"
+# processing ID
+- id: "source-processing-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/source-processing-id"
+# source message profile ID
+- id: "source-message-profile-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/source-message-profile-id"
+# application-identifier
+- id: "application-identifier"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/application-identifier"
+# facility-identifier
+- id: "facility-identifier"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/facility-identifier"
+# software binary identifier
+- id: "software-binary-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/software-binary-id"
+# software product information
+- id: "source-software-description"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/source-software-description"
+# software install date
+- id: "software-install-date"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/software-install-date"
+# software vendor organization
+- id: "software-vendor-org"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/software-vendor-org"
+# Organization name type
+- id: "organization-name-type"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/organization-name-type"
+# Entering organization
+- id: "entering-organization"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/entering-organization"
+# Organization assigning authority namespace ID
+- id: "assigning-authority-namespace-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/assigning-authority-namespace-id"
+# Organization assigning authority universal ID
+- id: "assigning-authority-universal-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/assigning-authority-universal-id"
+# Assigning facility
+- id: "assigning-facility"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/assigning-facility"
+# Assigning facility universal ID
+- id: "assigning-facility-universal-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/assigning-facility-universal-id"
+# Assigning facility namespace ID
+- id: "assigning-facility-namespace-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/assigning-facility-namespace-id"
+# Last updated facility
+- id: "last-updated-facility-namespace-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/last-updated-facility-namespace-id"
+# Last updated facility
+- id: "last-updated-facility-universal-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/last-updated-facility-universal-id"
+# Species code
+- id: "patient-animal"
+  url: "http://hl7.org/fhir/StructureDefinition/patient-animal"
+# Ethnic group
+- id: "ethnic-group"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/ethnic-group"
+# Location point of care
+- id: "point-of-care"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/point-of-care"
+# Encounter financial class
+- id: "financial-class"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/financial-class"
+# Encounter servicing facility
+- id: "servicing-facility"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/servicing-facility"
+# Encounter account status
+- id: "account-status"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/account-status"
+# Universal ID
+- id: "universal-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/universal-id"
+# Namespace ID
+- id: "namespace-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/namespace-id"
+# Service request order control
+- id: "order-control"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/order-control"
+# Generic text
+- id: "text"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/text"
+# Original text
+- id: "original-text"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/original-text"
+# Alternate identifier
+- id: "alternate-identifier"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/alternate-identifier"
+# Alternate version
+- id: "alternate-version"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/alternate-version"
+# Alternate value
+- id: "alternate-value"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/alternate-value"
+# Collector identifier
+- id: "collector-identifier"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/collector-identifier"
+# Clinical information
+- id: "clinical-information"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/clinical-information"
+# Placer user fields
+- id: "placer-field-1"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/placer-field-1"
+- id: "placer-field-2"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/placer-field-2"
+# Filler user fields
+- id: "filler-field-1"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/filler-field-1"
+- id: "filler-field-2"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/filler-field-2"
+# Results reported or changes
+- id: "result-reported"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/result-reported"
+# Result status
+- id: "result-status"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/result-status"
+# Response flag
+- id: "response-flag"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/response-flag"
+# Start of service
+- id: "start-of-service"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/start-of-service"
+# End of service
+- id: "end-of-service"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/end-of-service"
+# Service priority
+- id: "service-priority"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/service-priority"
+# Producer's ID
+- id: "producer-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/producer-id"
+# Coding system
+- id: "coding-system"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/coding-system"
+# Identifier type
+- id: "identifier-type"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/identifier-type"
+# Source of comment
+- id: "note-source"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/note-source"
+# Comment type
+- id: "note-type"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/note-type"
+# Patient notes as Annotations
+- id: "patient-notes"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/patient-notes"
+# Patient type
+- id: "patient-type"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/patient-type"
+# Parent observation sub identifier
+- id: "parent-observation-sub-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/parent-observation-sub-id"
+# Parent observation value descriptor
+- id: "parent-observation-value-descriptor"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/parent-observation-value-descriptor"
+# Placer assigned identifier
+- id: "placer-assigned-identifier"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/placer-assigned-identifier"
+# Filler assigned identifier
+- id: "filler-assigned-identifier"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/filler-assigned-identifier"
+# Sub ID
+- id: "sub-id"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/sub-id"
+# Comparator
+- id: "comparator"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/comparator"
+# Separator
+- id: "separator"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/separator"
+# Units
+- id: "units"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/units"
+# Effective Date of Reference Range
+- id: "effective-reference-range"
+  url: "https://reportstream.cdc.gov/fhir/StructureDefinition/effective-reference-range"

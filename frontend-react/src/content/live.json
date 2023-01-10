@@ -22,6 +22,10 @@
     },
     {
       "status": "Live",
+      "state": "Delaware"
+    },
+    {
+      "status": "Live",
       "state": "Florida"
     },
     {
@@ -30,7 +34,19 @@
     },
     {
       "status": "Live",
+      "state": "Idaho"
+    },
+    {
+      "status": "Live",
       "state": "Illinois"
+    },
+    {
+      "status": "Live",
+      "state": "Indiana"
+    },
+    {
+      "status": "Live",
+      "state": "Iowa"
     },
     {
       "status": "Live",
@@ -58,6 +74,14 @@
     },
     {
       "status": "Live",
+      "state": "Missouri"
+    },
+    {
+      "status": "Live",
+      "state": "Nevada"
+    },
+    {
+      "status": "Live",
       "state": "New Jersey"
     },
     {
@@ -70,7 +94,15 @@
     },
     {
       "status": "Live",
+      "state": "New York"
+    },
+    {
+      "status": "Live",
       "state": "North Dakota"
+    },
+    {
+      "status": "Live",
+      "state": "Oklahoma"
     },
     {
       "status": "Live",
@@ -83,6 +115,10 @@
     {
       "status": "Live",
       "state": "Pennsylvania"
+    },
+    {
+      "status": "Live",
+      "state": "Rhode Island"
     },
     {
       "status": "Live",

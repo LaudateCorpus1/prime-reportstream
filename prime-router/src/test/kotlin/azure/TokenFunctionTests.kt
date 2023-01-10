@@ -3,13 +3,15 @@ package gov.cdc.prime.router.azure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import com.microsoft.azure.functions.HttpStatus
+import gov.cdc.prime.router.CovidSender
 import gov.cdc.prime.router.CustomerStatus
 import gov.cdc.prime.router.Sender
+import gov.cdc.prime.router.common.BaseEngine
 import gov.cdc.prime.router.tokens.AccessToken
 import gov.cdc.prime.router.tokens.DatabaseJtiCache
 import gov.cdc.prime.router.tokens.Jwk
 import gov.cdc.prime.router.tokens.Scope
-import gov.cdc.prime.router.tokens.TokenAuthentication
+import gov.cdc.prime.router.tokens.Server2ServerAuthentication
 import gov.cdc.prime.router.unittest.UnitTestUtils
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.SignatureAlgorithm
@@ -39,11 +41,10 @@ class TokenFunctionTests {
     val keyPair = Keys.keyPairFor(SignatureAlgorithm.RS256)
     val pubKey = keyPair.getPublic() as RSAPublicKey
 
-    var sender = Sender(
+    var sender = CovidSender(
         "default",
         "simple_report",
         Sender.Format.CSV,
-        "covid-19",
         CustomerStatus.INACTIVE,
         "default"
     )
@@ -69,8 +70,8 @@ class TokenFunctionTests {
 
         val dataProvider = MockDataProvider { arrayOf<MockResult>(MockResult(0, null)) }
         val connection = MockConnection(dataProvider)
-        mockkObject(WorkflowEngine.Companion)
-        every { WorkflowEngine.Companion.databaseAccessSingleton } returns DatabaseAccess(connection)
+        mockkObject(BaseEngine.Companion)
+        every { BaseEngine.Companion.databaseAccessSingleton } returns DatabaseAccess(connection)
 
         mockkConstructor(DatabaseJtiCache::class)
         every { anyConstructed<DatabaseJtiCache>().isJTIOk(any(), any()) } returns true
@@ -102,7 +103,7 @@ class TokenFunctionTests {
 
         var httpRequestMessage = MockHttpRequestMessage()
         // Invoke
-        var response = TokenFunction(UnitTestUtils.simpleMetadata).report(httpRequestMessage)
+        var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
         // Verify
         assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
         assertThat(response.getBody()).isEqualTo("Missing client_assertion parameter")
@@ -115,7 +116,7 @@ class TokenFunctionTests {
         var httpRequestMessage = MockHttpRequestMessage()
         httpRequestMessage.parameters.put("client_assertion", token)
         // Invoke
-        var response = TokenFunction(UnitTestUtils.simpleMetadata).report(httpRequestMessage)
+        var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
         // Verify
         assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
         assertThat(response.getBody()).isEqualTo("Missing scope parameter")
@@ -132,7 +133,7 @@ class TokenFunctionTests {
             httpRequestMessage.parameters.put("client_assertion", token)
             httpRequestMessage.parameters.put("scope", it)
             // Invoke
-            var response = TokenFunction(UnitTestUtils.simpleMetadata).report(httpRequestMessage)
+            var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
             // Verify
             assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
             assertThat(response.getBody()).isEqualTo("Incorrect scope format: $it")
@@ -146,7 +147,7 @@ class TokenFunctionTests {
         httpRequestMessage.parameters.put("client_assertion", "verylong.signed.jwtstring")
         httpRequestMessage.parameters.put("scope", validScope)
         // Invoke
-        var response = TokenFunction(UnitTestUtils.simpleMetadata).report(httpRequestMessage)
+        var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
         // Verify
         assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
         assertThat(response.getBody()).isEqualTo(null)
@@ -154,7 +155,7 @@ class TokenFunctionTests {
             anyConstructed<ActionHistory>().trackActionResult(
                 match<String> {
                     it.startsWith(
-                        "Rejecting SenderToken JWT: io.jsonwebtoken.MalformedJwtException: Unable to read JSON value:"
+                        "Rejecting SenderToken JWT: io.jsonwebtoken.MalformedJwtException"
                     )
                 }
             )
@@ -174,7 +175,7 @@ class TokenFunctionTests {
         httpRequestMessage.parameters.put("scope", validScope)
         // Invoke
         var tokenFunction = TokenFunction(UnitTestUtils.simpleMetadata)
-        var response = tokenFunction.report(httpRequestMessage)
+        var response = tokenFunction.token(httpRequestMessage)
         // Verify
         assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
         verify {
@@ -186,7 +187,7 @@ class TokenFunctionTests {
 
     @Test
     fun `Test expired key`() {
-        settings.senderStore.put(sender.fullName, Sender(sender, validScope, jwk))
+        settings.senderStore.put(sender.fullName, CovidSender(sender, validScope, jwk))
 
         val expiresAtSeconds = ((System.currentTimeMillis() / 1000) + 10).toInt()
         val expirationDate = Date(expiresAtSeconds.toLong() - 1000)
@@ -199,7 +200,7 @@ class TokenFunctionTests {
         httpRequestMessage.parameters.put("client_assertion", token)
         httpRequestMessage.parameters.put("scope", validScope)
         // Invoke
-        var response = TokenFunction(UnitTestUtils.simpleMetadata).report(httpRequestMessage)
+        var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
         // Verify
         assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
     }
@@ -214,7 +215,7 @@ class TokenFunctionTests {
         httpRequestMessage.parameters.put("client_assertion", token)
         httpRequestMessage.parameters.put("scope", validScope)
         // Invoke
-        var response = TokenFunction(UnitTestUtils.simpleMetadata).report(httpRequestMessage)
+        var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
         // Verify
         assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
         verify {
@@ -227,7 +228,7 @@ class TokenFunctionTests {
 
     @Test
     fun `Test invalid scope for sender`() {
-        settings.senderStore.put(sender.fullName, Sender(sender, validScope, jwk))
+        settings.senderStore.put(sender.fullName, CovidSender(sender, validScope, jwk))
         listOf(
             // Wrong org
             listOf(
@@ -236,14 +237,7 @@ class TokenFunctionTests {
                     "Invalid scope for this sender: wrong.default.report",
                 "Expected organization simple_report. Instead got: wrong"
             ),
-            // Wrong sender
-            listOf(
-                "simple_report.wrong.report",
-                "AccessToken Request Denied: Error while requesting simple_report.wrong.report: " +
-                    "Invalid scope for this sender: simple_report.wrong.report",
-                "Expected sender default. Instead got: wrong"
-            ),
-            // Wrong 
+            // Wrong
             listOf(
                 "simple_report.default.bad",
                 "AccessToken Request Denied: Error while requesting simple_report.default.bad: " +
@@ -255,7 +249,7 @@ class TokenFunctionTests {
             httpRequestMessage.parameters.put("client_assertion", token)
             httpRequestMessage.parameters.put("scope", it[0])
             // Invoke
-            var response = TokenFunction(UnitTestUtils.simpleMetadata).report(httpRequestMessage)
+            var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
             // Verify
             assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
             verify { anyConstructed<ActionHistory>().trackActionResult(it[1]) }
@@ -266,13 +260,13 @@ class TokenFunctionTests {
     @Test
     fun `Test no key for scope`() {
 
-        settings.senderStore.put(sender.fullName, Sender(sender, "test.scope", jwk))
+        settings.senderStore.put(sender.fullName, CovidSender(sender, "test.scope", jwk))
 
         var httpRequestMessage = MockHttpRequestMessage()
         httpRequestMessage.parameters.put("client_assertion", token)
         httpRequestMessage.parameters.put("scope", validScope)
         // Invoke
-        var response = TokenFunction(UnitTestUtils.simpleMetadata).report(httpRequestMessage)
+        var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
         // Verify
         assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
         verify {
@@ -285,10 +279,12 @@ class TokenFunctionTests {
     }
 
     @Test
-    fun `Test success`() {
+    fun `Test success using parameters in URL`() {
 
-        mockkConstructor(TokenAuthentication::class)
-        every { anyConstructed<TokenAuthentication>().createAccessToken(any(), any(), any()) } returns AccessToken(
+        mockkConstructor(Server2ServerAuthentication::class)
+        every {
+            anyConstructed<Server2ServerAuthentication>().createAccessToken(any(), any(), any())
+        } returns AccessToken(
             "test",
             "test",
             "test",
@@ -297,14 +293,64 @@ class TokenFunctionTests {
             "test"
         )
 
-        settings.senderStore.put(sender.fullName, Sender(sender, validScope, jwk))
+        settings.senderStore.put(sender.fullName, CovidSender(sender, validScope, jwk))
 
         var httpRequestMessage = MockHttpRequestMessage()
         httpRequestMessage.parameters.put("client_assertion", token)
         httpRequestMessage.parameters.put("scope", validScope)
         // Invoke
-        var response = TokenFunction(UnitTestUtils.simpleMetadata).report(httpRequestMessage)
+        var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
         // Verify
         assertThat(response.getStatus()).isEqualTo(HttpStatus.OK)
+    }
+
+    @Test
+    fun `Test success using parameters in body`() {
+
+        mockkConstructor(Server2ServerAuthentication::class)
+        every {
+            anyConstructed<Server2ServerAuthentication>().createAccessToken(any(), any(), any())
+        } returns AccessToken(
+            "test",
+            "test",
+            "test",
+            10,
+            10,
+            "test"
+        )
+
+        settings.senderStore.put(sender.fullName, CovidSender(sender, validScope, jwk))
+
+        var httpRequestMessage = MockHttpRequestMessage("client_assertion=$token\n&scope=$validScope")
+
+        // Invoke
+        var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
+        // Verify
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.OK)
+    }
+
+    @Test
+    fun `Test crazy params in body`() {
+        settings.senderStore.put(sender.fullName, CovidSender(sender, validScope, jwk))
+
+        var httpRequestMessage = MockHttpRequestMessage("client_assertion=&scope=$validScope")
+        var response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
+
+        httpRequestMessage = MockHttpRequestMessage("client_assertion=anything&scope=$validScope")
+        response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
+
+        httpRequestMessage = MockHttpRequestMessage("client_assertion=any.darn.thing&scope=$validScope")
+        response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
+
+        httpRequestMessage = MockHttpRequestMessage("=&=")
+        response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
+
+        httpRequestMessage = MockHttpRequestMessage("gobbledygook==&&&&==")
+        response = TokenFunction(UnitTestUtils.simpleMetadata).token(httpRequestMessage)
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED)
     }
 }

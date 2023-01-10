@@ -1,12 +1,13 @@
 # Tips for Faster Development
 
+> Note: [GitHub codespaces](using-codespaces.md) are available for a browser-only dev environment.
+
 Using the Docker containers makes it simple to run the baseline locally, but takes some time to tear down
 the containers, rebuild and redeploy.  If you are wanting to 
 test changes more quickly and/or save memory you can then run the Azure functions locally.
 
 ## Limitations
-1. You need to run all required services like the database, Azurite, Vault, etc.  See Setup section below.
-1. The settings table will NOT be updated automatically and any updates must be done manually
+1. The settings and lookup tables will NOT be updated automatically and any updates must be done manually
 1. Logs only scroll in the terminal that runs the functions
 
 ## Advantages
@@ -21,7 +22,6 @@ a one time procedure and only needs to be run at workstation startup or when you
 
 ```bash
 docker-compose -f docker-compose.build.yml up --detach
-docker-compose up --scale prime_dev=0 --detach
 ```
 
 ### Running the Azure functions
@@ -36,6 +36,13 @@ tests will not run:
 `./gradlew quickRun`
 
 To stop the run simply press CTRL-C in the window running the functions.
+
+### Loading the Settings
+Run the following commands to populate the database.  Note these commands require ReportStream to be running:
+```bash
+./gradlew reloadTables
+./gradlew reloadSettings
+```
 
 ## Debugging
 Connect your debugger remotely to port 5005.  For profiling use JMX port 9090.

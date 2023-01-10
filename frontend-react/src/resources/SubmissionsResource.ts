@@ -1,18 +1,26 @@
+import config from "../config";
+
 import AuthResource from "./AuthResource";
+
+const { RS_API_URL } = config;
 
 type SubmissionsResourceParams = {
     organization: string;
-    pageSize: number;
+    sortdir: string;
+    sortcol: string;
     cursor: string;
-    sort: string;
+    since: string;
+    until: string;
+    pageSize: number;
+    showFailed: boolean;
 };
 
 const FALLBACKDATE = "2020-01-01T00:00:00.000Z";
 
 export default class SubmissionsResource extends AuthResource {
-    readonly taskId: number = 0;
-    readonly createdAt: string = FALLBACKDATE; // format is "2022-02-01T15:11:58.200754Z"
-    readonly sendingOrg: string = "";
+    readonly submissionId: number = 0;
+    readonly timestamp: string = FALLBACKDATE; // format is "2022-02-01T15:11:58.200754Z"
+    readonly sender: string = "";
     readonly httpStatus: number = 0;
     readonly externalName: string = "";
     readonly id: string | undefined;
@@ -23,8 +31,8 @@ export default class SubmissionsResource extends AuthResource {
 
     pk() {
         // For failed submissions, the report id will be null. Rest Hooks will not cache a record without a pk, thus
-        // falling back to using createdAt.
-        return `${this.createdAt} ${this.id}`;
+        // falling back to using timestamp
+        return `${this.timestamp} ${this.id}`;
     }
 
     static get key() {
@@ -32,7 +40,16 @@ export default class SubmissionsResource extends AuthResource {
     }
 
     static listUrl(searchParams: SubmissionsResourceParams): string {
-        return `${process.env.REACT_APP_BACKEND_URL}/api/history/${searchParams.organization}/submissions?pagesize=${searchParams.pageSize}&cursor=${searchParams.cursor}&sort=${searchParams.sort}`;
+        const url = new URL(`
+            ${RS_API_URL}/api/waters/org/${searchParams.organization}/submissions`);
+        url.searchParams.append("pageSize", searchParams.pageSize.toString());
+        url.searchParams.append("cursor", searchParams.cursor);
+        url.searchParams.append("since", searchParams.since);
+        url.searchParams.append("until", searchParams.until);
+        url.searchParams.append("sortcol", searchParams.sortcol);
+        url.searchParams.append("sortdir", searchParams.sortdir);
+        url.searchParams.append("showfailed", String(searchParams.showFailed));
+        return url.href;
     }
 
     isSuccessSubmitted(): boolean {
@@ -51,9 +68,9 @@ export default class SubmissionsResource extends AuthResource {
     ): number {
         // format "2022-02-01T15:11:58.200754Z" means we can compare strings without converting to dates
         // since it's in descending time format (aka year, month, day, hour, min, sec)
-        if (a.createdAt === b.createdAt) {
+        if (a.timestamp === b.timestamp) {
             return 0;
         }
-        return a.createdAt > b.createdAt ? -1 : 1;
+        return a.timestamp > b.timestamp ? -1 : 1;
     }
 }

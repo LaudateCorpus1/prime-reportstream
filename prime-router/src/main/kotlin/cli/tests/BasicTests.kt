@@ -3,8 +3,8 @@ package gov.cdc.prime.router.cli.tests
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.github.ajalt.clikt.output.TermUi.echo
 import com.google.common.base.CharMatcher
+import gov.cdc.prime.router.CovidSender
 import gov.cdc.prime.router.Options
 import gov.cdc.prime.router.REPORT_MAX_ITEM_COLUMNS
 import gov.cdc.prime.router.Receiver
@@ -17,6 +17,7 @@ import gov.cdc.prime.router.azure.db.enums.TaskAction
 import gov.cdc.prime.router.cli.FileUtilities
 import gov.cdc.prime.router.common.Environment
 import gov.cdc.prime.router.common.SystemExitCodes
+import gov.cdc.prime.router.history.DetailedSubmissionHistory
 import kotlinx.coroutines.delay
 import org.jooq.exception.DataAccessException
 import java.io.File
@@ -84,7 +85,7 @@ class End2End : CoolTest() {
         ugly("Running end2end synchronously -- with no query param")
         var passed = true
         val fakeItemCount = allGoodReceivers.size * options.items
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             simpleRepSender,
@@ -138,7 +139,7 @@ class End2End : CoolTest() {
         ugly("Running end2end asynchronously -- with query param")
         var passed = true
         val fakeItemCount = allGoodReceivers.size * options.items
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             simpleRepSender,
@@ -293,7 +294,7 @@ class Merge : CoolTest() {
         val mergingCounties = mergingReceivers.map { it.name }.joinToString(",")
         val fakeItemCount = mergingReceivers.size * options.items
         ugly("Starting merge test:  Merge ${options.submits} reports, each of which sends to $mergingCounties")
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             simpleRepSender,
@@ -342,7 +343,7 @@ class Hl7Null : CoolTest() {
     override suspend fun run(environment: Environment, options: CoolTestOptions): Boolean {
         val fakeItemCount = 100
         ugly("Starting hl7null Test: test of many threads all doing database interactions, but no sends. ")
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             simpleRepSender,
@@ -471,7 +472,7 @@ class Strac : CoolTest() {
         ugly("Starting bigly strac Test: sending Strac data to all of these receivers: $allGoodCounties!")
         var passed = true
         val fakeItemCount = allGoodReceivers.size * options.items
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             stracSender,
@@ -523,7 +524,7 @@ class Waters : CoolTest() {
 
     override suspend fun run(environment: Environment, options: CoolTestOptions): Boolean {
         ugly("Starting Waters: sending ${options.items} Waters items to ${blobstoreReceiver.name} receiver")
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             watersSender,
@@ -569,7 +570,7 @@ class Garbage : CoolTest() {
         ugly("Starting $name Test: send ${emptySender.fullName} data to $allGoodCounties")
         var passed = true
         val fakeItemCount = allGoodReceivers.size * options.items
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             emptySender,
@@ -621,13 +622,50 @@ class QualityFilter : CoolTest() {
     override val status = TestStatus.SMOKE
 
     /**
-     * In the returned json, check the itemCount associated with receiver.name in the list of destinations.
+     * In the returned [history] response, check the itemCount associated with [receiver] name in the list of
+     * destinations against the [expectedCount].
+     * @return true if the check succeeds
+     */
+    private fun checkJsonItemCountForReceiver(
+        receiver: Receiver,
+        expectedCount: Int,
+        history: DetailedSubmissionHistory
+    ): Boolean {
+        try {
+            val reportId = history.reportId
+            echo("Id of submitted report: $reportId")
+            val destinations = history.destinations
+            for (destination in destinations) {
+                if (destination.service == receiver.name) {
+                    return if (destination.itemCount == expectedCount) {
+                        good("Test Passed: For ${receiver.name} expected $expectedCount and found $expectedCount")
+                    } else {
+                        bad(
+                            "***Test FAILED***; For ${receiver.name} expected " +
+                                "$expectedCount but got ${destination.itemCount}"
+                        )
+                    }
+                }
+            }
+            if (expectedCount == 0)
+                return good("Test Passed: No data went to ${receiver.name} dest")
+            else
+                return bad("***Test FAILED***: No data went to ${receiver.name} dest")
+        } catch (e: Exception) {
+            return bad("***$name Test FAILED***: Unexpected json returned for ${receiver.name}")
+        }
+    }
+
+    /**
+     * In the returned [json] response, check the itemCount associated with [receiver] name in the list of
+     * destinations against the [expectedCount].
+     * @return true if the check succeeds
      */
     private fun checkJsonItemCountForReceiver(receiver: Receiver, expectedCount: Int, json: String): Boolean {
         try {
             echo(json)
             val tree = jacksonObjectMapper().readTree(json)
-            val reportId = ReportId.fromString(tree["id"].textValue())
+            val reportId = ReportId.fromString(tree["reportId"].textValue())
             echo("Id of submitted report: $reportId")
             val destinations = tree["destinations"] as ArrayNode
             for (i in 0 until destinations.size()) {
@@ -657,7 +695,7 @@ class QualityFilter : CoolTest() {
         // ALLOW ALL
         ugly("\nTest the allowAll QualityFilter")
         val fakeItemCount = 5
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             emptySender,
@@ -701,7 +739,7 @@ class QualityFilter : CoolTest() {
         // QUALITY_PASS
         ugly("\nTest a QualityFilter that allows some data through")
         expectItemCount = fakeItemCount - 2 // Removed 2 items
-        val file2 = FileUtilities.createFakeFile(
+        val file2 = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             emptySender,
@@ -742,7 +780,7 @@ class QualityFilter : CoolTest() {
         // FAIL
         ugly("\nTest a QualityFilter that allows NO data through.")
         expectItemCount = 0 // No Item
-        val file3 = FileUtilities.createFakeFile(
+        val file3 = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             emptySender,
@@ -783,7 +821,7 @@ class QualityFilter : CoolTest() {
         // QUALITY_REVERSED
         ugly("\nTest the REVERSE of the QualityFilter that allows some data through")
         expectItemCount = 2
-        val file4 = FileUtilities.createFakeFile(
+        val file4 = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             emptySender,
@@ -838,7 +876,7 @@ class DbConnections : CoolTest() {
 
     override suspend fun run(environment: Environment, options: CoolTestOptions): Boolean {
         ugly("Starting dbconnections Test: test of many threads attempting to sftp ${options.items} HL7s.")
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             simpleRepSender,
@@ -899,7 +937,7 @@ class BadSftp : CoolTest() {
 
     override suspend fun run(environment: Environment, options: CoolTestOptions): Boolean {
         ugly("Starting badsftp Test: test that our code handles sftp connectivity problems")
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             simpleRepSender,
@@ -959,7 +997,7 @@ class InternationalContent : CoolTest() {
         }
         val receiverName = hl7Receiver.name
         ugly("Starting $name Test: send ${simpleRepSender.fullName} data to $receiverName")
-        val file = FileUtilities.createFakeFile(
+        val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
             simpleRepSender,
@@ -1009,7 +1047,7 @@ class InternationalContent : CoolTest() {
         } catch (e: NullPointerException) {
             return bad("***intcontent Test FAILED***: Unable to properly parse response json")
         } catch (e: DataAccessException) {
-            echo(e)
+            echoFn(e, true, true, "\n")
             return bad("***intcontent Test FAILED***: There was an error fetching data from the database.")
         }
     }
@@ -1019,7 +1057,6 @@ class InternationalContent : CoolTest() {
  * Creates fake data as if from a sender and tries to send it to every state and territory
  */
 class SantaClaus : CoolTest() {
-
     override val name = "santaclaus"
     override val description = "Creates fake data as if from a sender and tries to send it to every state and territory"
     override val status = TestStatus.DRAFT
@@ -1050,10 +1087,10 @@ class SantaClaus : CoolTest() {
 
         sendersToTestWith.forEach { sender ->
             ugly("Starting $name Test: send with ${sender.fullName}")
-            val file = FileUtilities.createFakeFile(
+            val file = FileUtilities.createFakeCovidFile(
                 metadata = metadata,
                 settings = settings,
-                sender = sender,
+                sender = sender as CovidSender,
                 count = states.size,
                 format = if (sender.format == Sender.Format.CSV) Report.Format.CSV else Report.Format.HL7_BATCH,
                 directory = System.getProperty("java.io.tmpdir"),
@@ -1152,7 +1189,7 @@ class OtcProctored : CoolTest() {
     override suspend fun run(environment: Environment, options: CoolTestOptions): Boolean {
         val otcPairs = listOf(
             Pair("BinaxNOW COVID-19 Antigen Self Test_Abbott Diagnostics Scarborough, Inc.", "OTC_PROCTORED_YYY"),
-            Pair("QuickVue At-Home COVID-19 Test_Quidel Corporation", "OTC_PROCTORED_NYY"),
+            Pair("10811877011337", "OTC_PROCTORED_NYY"),
             Pair("00810055970001", "OTC_PROCTORED_NUNKUNK"),
         )
         for (pair in otcPairs) {
@@ -1190,7 +1227,7 @@ class OtcProctored : CoolTest() {
                         // verify each result is valid
                         for (result in processResults.values)
                             if (!examineProcessResponse(result))
-                                bad("***async end2end FAILED***: Process result invalid")
+                                bad("*** otcproctored FAILED***: Process result invalid")
                     }
                 }
                 good("Test PASSED: ${pair.first}")

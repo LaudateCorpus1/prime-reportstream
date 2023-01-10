@@ -7,9 +7,11 @@ import com.microsoft.azure.functions.annotation.QueueTrigger
 import com.microsoft.azure.functions.annotation.StorageAccount
 import gov.cdc.prime.router.AS2TransportType
 import gov.cdc.prime.router.BlobStoreTransportType
-import gov.cdc.prime.router.FTPSTransportType
+import gov.cdc.prime.router.CustomerStatus
 import gov.cdc.prime.router.GAENTransportType
 import gov.cdc.prime.router.NullTransportType
+import gov.cdc.prime.router.RESTTransportType
+import gov.cdc.prime.router.Receiver
 import gov.cdc.prime.router.ReportId
 import gov.cdc.prime.router.SFTPTransportType
 import gov.cdc.prime.router.SoapTransportType
@@ -18,10 +20,10 @@ import gov.cdc.prime.router.azure.db.enums.TaskAction
 import gov.cdc.prime.router.transport.ITransport
 import gov.cdc.prime.router.transport.NullTransport
 import gov.cdc.prime.router.transport.RetryToken
+import org.apache.logging.log4j.kotlin.Logging
 import java.time.OffsetDateTime
 import java.util.Date
 import java.util.UUID
-import java.util.logging.Level
 import kotlin.random.Random
 
 /**
@@ -38,7 +40,7 @@ val retryDuration = mapOf(1 to 1L, 2 to 5L, 3 to 30L, 4 to 75L, 5 to 120L)
 // Use this for testing retries:
 // val retryDuration = mapOf(1 to 1L, 2 to 1L, 3 to 1L, 4 to 1L, 5 to 1L)
 
-class SendFunction(private val workflowEngine: WorkflowEngine = WorkflowEngine()) {
+class SendFunction(private val workflowEngine: WorkflowEngine = WorkflowEngine()) : Logging {
     @FunctionName(send)
     @StorageAccount("AzureWebJobsStorage")
     fun run(
@@ -51,20 +53,22 @@ class SendFunction(private val workflowEngine: WorkflowEngine = WorkflowEngine()
     ) {
         val event = Event.parseQueueMessage(message) as ReportEvent
         val actionHistory = ActionHistory(TaskAction.send, event.isEmptyBatch)
+        var receiverStatus: CustomerStatus = CustomerStatus.INACTIVE
         actionHistory.trackActionParams(message)
-        context.logger.info(
+        logger.info(
             "Started Send Function: $message, id=$messageId," +
                 " dequeueCount=$dequeueCount, " +
                 " nextVisibleTime=$nextVisibleTime, insertionTime=$insertionTime"
         )
         try {
             if (event.eventAction != Event.EventAction.SEND) {
-                context.logger.warning("Send function received a $message")
+                logger.warn("Send function received a message of incorrect type: $message")
                 return
             }
-            workflowEngine.handleReportEvent(event, context) { header, retryToken, _ ->
+            workflowEngine.handleReportEvent(event) { header, retryToken, _ ->
                 val receiver = header.receiver
                     ?: error("Internal Error: could not find ${header.task.receiverName}")
+                receiverStatus = receiver.customerStatus
                 val inputReportId = header.reportFile.reportId
                 actionHistory.trackExistingInputReport(inputReportId)
                 val serviceName = receiver.fullName
@@ -87,28 +91,31 @@ class SendFunction(private val workflowEngine: WorkflowEngine = WorkflowEngine()
                         nextRetryItems += nextRetry
                     }
                 }
-                context.logger.info("For $inputReportId:  finished send().  Calling handleRetry.")
+                logger.info("For $inputReportId:  finished send().  Checking to see if a retry is needed.")
                 handleRetry(
                     nextRetryItems,
                     inputReportId,
-                    serviceName,
+                    receiver,
                     retryToken,
-                    context,
                     actionHistory,
                     event.isEmptyBatch
                 )
             }
         } catch (t: Throwable) {
             // For debugging and auditing purposes
-            val msg = "Send function unrecoverable exception for event: $message"
-            context.logger.log(Level.SEVERE, msg, t)
+            val msg = "Send function unrecoverable exception for event. Mo intervention required: $message"
             actionHistory.setActionType(TaskAction.send_error)
             actionHistory.trackActionResult(msg)
+            if (receiverStatus == CustomerStatus.ACTIVE) {
+                logger.fatal("${actionHistory.action.actionResult}", t)
+            } else {
+                logger.error("${actionHistory.action.actionResult}", t)
+            }
         } finally {
             // Note this is operating in a different transaction than the one that did the fetch/lock of the repor
-            context.logger.info("About to save ActionHistory for $message")
+            logger.debug("About to save ActionHistory for $message")
             workflowEngine.recordAction(actionHistory)
-            context.logger.info("Done saving ActionHistory for $message")
+            logger.debug("Done saving ActionHistory for $message")
         }
     }
 
@@ -117,9 +124,9 @@ class SendFunction(private val workflowEngine: WorkflowEngine = WorkflowEngine()
             is SFTPTransportType -> workflowEngine.sftpTransport
             is BlobStoreTransportType -> workflowEngine.blobStoreTransport
             is AS2TransportType -> workflowEngine.as2Transport
-            is FTPSTransportType -> workflowEngine.ftpsTransport
             is SoapTransportType -> workflowEngine.soapTransport
             is GAENTransportType -> workflowEngine.gaenTransport
+            is RESTTransportType -> workflowEngine.restTransport
             is NullTransportType -> NullTransport()
             else -> null
         }
@@ -128,24 +135,28 @@ class SendFunction(private val workflowEngine: WorkflowEngine = WorkflowEngine()
     private fun handleRetry(
         nextRetryItems: List<String>,
         reportId: ReportId,
-        serviceName: String,
+        receiver: Receiver,
         retryToken: RetryToken?,
-        context: ExecutionContext,
         actionHistory: ActionHistory,
         isEmptyBatch: Boolean
     ): ReportEvent {
         return if (nextRetryItems.isEmpty()) {
             // All OK
-            context.logger.info("Successfully sent report: $reportId to $serviceName")
+            logger.info("Successfully sent report: $reportId to ${receiver.fullName}")
             ReportEvent(Event.EventAction.NONE, reportId, isEmptyBatch)
         } else {
             val nextRetryCount = (retryToken?.retryCount ?: 0) + 1
             if (nextRetryCount > maxRetryCount) {
                 // Stop retrying and just put the task into an error state
-                val msg = "All retries failed.  Send Error report for: $reportId to $serviceName"
+                val msg = "All retries failed.  Manual Intervention Required.  " +
+                    "Send Error report for: $reportId to ${receiver.fullName}"
                 actionHistory.setActionType(TaskAction.send_error)
                 actionHistory.trackActionResult(msg)
-                context.logger.info(msg)
+                if (receiver.customerStatus == CustomerStatus.ACTIVE) {
+                    logger.fatal("${actionHistory.action.actionResult}")
+                } else {
+                    logger.error("${actionHistory.action.actionResult}")
+                }
                 ReportEvent(Event.EventAction.SEND_ERROR, reportId, isEmptyBatch)
             } else {
                 // retry using a back-off strategy
@@ -153,9 +164,9 @@ class SendFunction(private val workflowEngine: WorkflowEngine = WorkflowEngine()
                 val randomSeconds = Random.nextInt(-30, 31)
                 val nextRetryTime = OffsetDateTime.now().plusSeconds(waitMinutes * 60 + randomSeconds)
                 val nextRetryToken = RetryToken(nextRetryCount, nextRetryItems)
-                val msg = "Send Failed.  Will retry sending report: $reportId to $serviceName}" +
+                val msg = "Send Failed.  Will retry sending report: $reportId to ${receiver.fullName}" +
                     " in $waitMinutes minutes and $randomSeconds seconds at $nextRetryTime"
-                context.logger.info(msg)
+                logger.warn(msg)
                 actionHistory.setActionType(TaskAction.send_warning)
                 actionHistory.trackActionResult(msg)
                 ReportEvent(Event.EventAction.SEND, reportId, isEmptyBatch, nextRetryTime, nextRetryToken)

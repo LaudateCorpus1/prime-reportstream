@@ -9,6 +9,7 @@
 #
 name: covid-19
 topic: covid-19
+trackingElement: message_id
 description: collection of standard elements, not an actual schema
 elements:
   - name: abnormal_flag
@@ -27,7 +28,7 @@ elements:
     hl7Field: NTE-3
 
   - name: comment_source
-    type: CODE
+    type: ID
     natFlatFileField:
     hhsGuidanceField:
     hl7Field: NTE-2
@@ -141,7 +142,7 @@ elements:
     hhsGuidanceField:
 
   - name: file_created_date
-    type: DATE
+    type: DATETIME
     natFlatFileField: File_created_date
     hhsGuidanceField:
     hl7Field: MSH-7
@@ -203,20 +204,6 @@ elements:
     hl7Field: AOE
     hl7AOEQuestion: 65222-2
 
-  - name: observation_result_status
-    type: CODE
-    natFlatFileField:
-    hhsGuidanceField:
-    hl7Field: OBX-11
-    valueSet: hl70085
-
-  - name: order_result_status
-    type: CODE
-    valueSet: hl70123
-    natFlatFileField: Order_result_status
-    hhsGuidanceField:
-    hl7Field: OBR-25
-
   - name: order_test_date
     type: DATETIME
     natFlatFileField: Order_test_date
@@ -275,12 +262,16 @@ elements:
     type: TABLE
     table: fips-county
     tableColumn: FIPS
-    mapper: lookup(ordering_facility_state, ordering_facility_county)
+    mapper: lookup(ordering_facility_state, $Column:State, ordering_facility_county, $Column:County)
     hl7Field: ORC-22-9
 
   - name: ordering_facility_country
     type: TEXT
+    natFlatFileField: Ordering_facility_country
+    hhsGuidanceField:
+    hl7Field: ORC-22-6
     default: USA
+    documentation: The country of the facility
 
   - name: ordering_facility_email
     type: EMAIL
@@ -353,14 +344,17 @@ elements:
     pii: false
     table: fips-county
     tableColumn: FIPS
-    mapper: lookup(ordering_provider_state, ordering_provider_county)
+    mapper: lookup(ordering_provider_state, $Column:State, ordering_provider_county, $Column:County)
     hl7Field: ORC-24-9
     documentation: The FIPS code for the ordering provider
 
   - name: ordering_provider_country
     type: TEXT
-    pii: false
+    natFlatFileField: Ordering_provider_country
+    hhsGuidanceField:
+    hl7Field: ORC-24-6
     default: USA
+    documentation: The country of the provider
 
   - name: ordering_provider_first_name
     type: PERSON_NAME
@@ -475,7 +469,7 @@ elements:
 
   - name: patient_age
     type: NUMBER
-    pii: false
+    pii: true
     cardinality: ZERO_OR_ONE
     natFlatFileField: Patient_age
     hhsGuidanceField:
@@ -521,7 +515,7 @@ elements:
     cardinality: ZERO_OR_ONE
     table: fips-county
     tableColumn: FIPS
-    mapper: lookup(patient_state, patient_county)
+    mapper: lookup(patient_state, $Column:State, patient_county, $Column:County)
     natFlatFileField: Patient_county
     hl7Field: PID-11-9
     documentation: The FIPS code for the patient's county
@@ -838,9 +832,27 @@ elements:
 
   - name: message_profile_id
     type: EI
-    hl7Field: MSH-21
-    default: PHLabReport-NoAck^ELR_Receiver^2.16.840.1.113883.9.11^ISO
+    hl7Field: MSH-21-1
+    default: PHLabReport-NoAck
     documentation: The message profile identifer
+
+  - name: message_profile_id_namespace_id
+    type: TEXT
+    hl7Field: MSH-21-2
+    default: ELR_Receiver
+    documentation: The message profile identifer namespace id
+
+  - name: message_profile_id_universal_id
+    type: TEXT
+    hl7Field: MSH-21-3
+    default: 2.16.840.1.113883.9.11
+    documentation: The message profile identifer universal id
+
+  - name: message_profile_id_universal_id_type
+    type: TEXT
+    hl7Field: MSH-21-4
+    default: ISO
+    documentation: The message profile identifer universal id type
 
   # name: public_health_case_id
   # type: ID
@@ -902,6 +914,16 @@ elements:
     hl7AOEQuestion: 95421-4
     documentation: Does the patient reside in a congregate care setting?
 
+  - name: residence_type
+    type: CODE
+    cardinality: ZERO_OR_ONE
+    valueSet: covid-19/residence_type
+    natFlatFileField: Residence_type
+    hhsGuidanceField: Residence type
+    hl7Field: AOE
+    hl7AOEQuestion: 75617-1
+    documentation: Congregate Setting Residence Type?
+
   - name: result_format
     type: TEXT
     default: CWE
@@ -921,7 +943,7 @@ elements:
   - name: site_of_care
     type: TEXT
     natFlatFileField: Site_of_care
-    documentation: The type of facility providing care (Hospital, Nursing Home, etc.).
+    documentation: The type of facility providing care (Hospital, Nursing Home, etc.).  This is a CUSTOM internal field. DO NOT use this for the COVID AOE residence_type.
 
   - name: specimen_collection_date_time
     type: DATETIME
@@ -1019,6 +1041,126 @@ elements:
     mapper: livdLookup()
     default: N
     documentation: Is the test authorized for unproctored administration by the FDA (Y, N, UNK)
+
+  - name: test_type
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: TestType
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: clia_complexity
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: CLIAComplexity
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: test_method
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: Test Method
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: Screening
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: Screening
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: serial_screening
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: Serial Screening
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: direct_to_consumer
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: Direct to Consumer (DTC)
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: nonprescription_testing
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: Non-prescription Testing
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: home_collection
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: Home Collection
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: prescription_home_testing
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: Prescription Home Testing
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: over_the_counter_home_testing
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: Over the Counter (OTC) Home Testing
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: collection_kit
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: Collection Kit
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
+
+  - name: telehealth_proctor_supervised
+    type: TABLE
+    table: LIVD-SARS-CoV-2
+    tableColumn: Telehealth Proctor Supervised
+    reference:
+    referenceUrl:
+    mapper: livdLookup()
+    default:
+    documentation:
 
   - name: test_correction_reason
     type: TEXT
@@ -1123,11 +1265,29 @@ elements:
     valueSet: hl70085
     natFlatFileField: Test_result_status
     hhsGuidanceField:
-    hl7Field: OBX-11-1
-    hl7OutputFields: [OBX-11-1, OBR-25-1]
+    hl7Field:
+    mapper: use(observation_result_status)
     documentation: |
       The test result status, which is different from the test result itself. Per the valueset, this indicates if
       the test result is in some intermediate status, is a correction, or is the final result.
+
+  - name: observation_result_status
+    type: ID
+    default: F
+    natFlatFileField:
+    hhsGuidanceField:
+    hl7Field: OBX-11-1
+    valueSet: hl70085
+    mapper: use(test_result_status)
+
+  - name: order_result_status
+    type: ID
+    default: F
+    natFlatFileField: Order_result_status
+    hhsGuidanceField:
+    hl7Field: OBR-25-1
+    valueSet: hl70123
+    mapper: use(test_result_status)
 
   - name: test_result_sub_id
     type: ID
@@ -1169,7 +1329,7 @@ elements:
     type: TABLE
     table: fips-county
     tableColumn: FIPS
-    mapper: lookup(testing_lab_state, testing_lab_county)
+    mapper: lookup(testing_lab_state, $Column:State, testing_lab_county, $Column:County)
     natFlatFileField: Testing_lab_county
     hhsGuidanceField:
     hl7Field: OBX-24-9
@@ -1178,6 +1338,9 @@ elements:
 
   - name: testing_lab_country
     type: TEXT
+    natFlatFileField: Testing_lab_country
+    hhsGuidanceField:
+    hl7Field: OBX-24-6
     default: USA
     documentation: The country for the testing lab. Currently defaults to USA
 
@@ -1190,9 +1353,19 @@ elements:
 
   - name: testing_lab_id_assigner
     type: HD
-    mapper: ifPresent(testing_lab_clia, CLIA^2.16.840.1.113883.4.7^ISO)
-    hl7Field: OBX-23-6
+    mapper: ifPresent(testing_lab_clia, CLIA)
+    hl7Field: OBX-23-6-1
     documentation: This is the assigner of the CLIA for the testing lab. If the testing lab has a CLIA, this field will be filled in.
+
+  - name: testing_lab_id_universal_id
+    type: TEXT
+    mapper: ifPresent(testing_lab_clia, 2.16.840.1.113883.4.7)
+    hl7Field: OBX-23-6-2
+
+  - name: testing_lab_id_universal_id_type
+    type: TEXT
+    mapper: ifPresent(testing_lab_clia, ISO)
+    hl7Field: OBX-23-6-3
 
   - name: testing_lab_clia
     type: ID_CLIA
@@ -1278,7 +1451,7 @@ elements:
   #  hl7Field: AOE
 
   - name: value_type
-    type: CODE
+    type: ID
     natFlatFileField:
     hhsGuidanceField:
     hl7Field: OBX-2

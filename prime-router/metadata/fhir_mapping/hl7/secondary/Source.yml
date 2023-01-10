@@ -1,0 +1,83 @@
+name:
+  type: STRING
+  valueOf: MSH.3
+  expressionType: HL7Spec
+
+# For OIDs
+endpoint_1:
+  type: URL
+  condition: $idStr NOT_NULL && $systemStr EQUALS ISO
+  valueOf: $value
+  expressionType: HL7Spec
+  vars:
+    idStr: String, MSH.3.2
+    value: $oidUrlPrefix + MSH.3.2
+    systemStr: String, MSH.3.3
+  constants:
+    oidUrlPrefix: "urn:oid:"
+
+# For all other ID types
+endpoint_2:
+  type: URL
+  condition: $idStr NOT_NULL && $systemStr NOT_EQUALS ISO
+  valueOf: $value
+  expressionType: HL7Spec
+  vars:
+    idStr: String, MSH.3.2
+    value: $idUrlPrefix + MSH.3.2
+    systemStr: String, MSH.3.3
+  constants:
+    idUrlPrefix: "urn:id:"
+
+version:
+  type: STRING
+  valueOf: SFT.2
+  expressionType: HL7Spec
+
+software:
+  type: STRING
+  valueOf: SFT.3
+  expressionType: HL7Spec
+
+extension_1:
+  generateList: true
+  valueOf: extension/Extension
+  expressionType: resource
+  vars:
+    value: String, SFT.4
+  constants:
+    KEY_NAME_SUFFIX: String
+    urlValue: software-binary-id
+
+extension_2:
+  generateList: true
+  valueOf: extension/Extension
+  expressionType: resource
+  vars:
+    value: String, SFT.5
+  constants:
+    KEY_NAME_SUFFIX: String
+    urlValue: source-software-description
+
+extension_3:
+  generateList: true
+  valueOf: extension/Extension
+  expressionType: resource
+  vars:
+    value: SFT.6, GeneralUtils.dateTimeWithZoneId(value,ZONEID)
+  constants:
+    KEY_NAME_SUFFIX: DateTime
+    urlValue: software-install-date
+
+extension_4:
+  generateList: true
+  expressionType: nested
+  expressionsMap:
+    url:
+      type: SYSTEM_URL
+      value: "software-vendor-org"
+    valueReference:
+      valueOf: resource/Organization
+      expressionType: reference
+      specs: SFT.1
+

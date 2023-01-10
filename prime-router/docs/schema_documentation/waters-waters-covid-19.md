@@ -446,7 +446,7 @@ The zip code of the provider
 
 **Type**: NUMBER
 
-**PII**: No
+**PII**: Yes
 
 **LOINC Code**: 30525-0
 
@@ -1005,7 +1005,7 @@ Code | Display | System
 
 **Documentation**:
 
-The type of facility providing care (Hospital, Nursing Home, etc.).
+The type of facility providing care (Hospital, Nursing Home, etc.).  This is a CUSTOM internal field. DO NOT use this for the COVID AOE residence_type.
 
 ---
 
@@ -1091,6 +1091,10 @@ Code | Display | System
 122555007|Venous blood specimen|SNOMED_CT
 119297000|Blood specimen|SNOMED_CT
 122554006|Capillary blood specimen|SNOMED_CT
+258467004|Nasopharyngeal washings|SNOMED_CT
+418932006|Oral swab specimen|SNOMED_CT
+433801000124107|Nasopharyngeal and oropharyngeal swab|SNOMED_CT
+309171007|Lower respiratory fluid sample|SNOMED_CT
 
 **Documentation**:
 
@@ -1415,5 +1419,21 @@ Is the test authorized for over-the-counter purchase by the FDA (Y, N, UNK)
 **Documentation**:
 
 Is the test authorized for unproctored administration by the FDA (Y, N, UNK)
+
+---
+
+**Name**: test_type
+
+**ReportStream Internal Name**: test_type
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: TestType
 
 ---

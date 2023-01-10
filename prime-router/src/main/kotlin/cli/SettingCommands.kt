@@ -6,13 +6,11 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.KotlinFeature
 import com.fasterxml.jackson.module.kotlin.KotlinModule
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.PrintMessage
 import com.github.ajalt.clikt.core.ProgramResult
 import com.github.ajalt.clikt.core.subcommands
-import com.github.ajalt.clikt.output.TermUi
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
@@ -39,8 +37,8 @@ import gov.cdc.prime.router.Sender
 import gov.cdc.prime.router.azure.HttpUtilities
 import gov.cdc.prime.router.azure.OrganizationAPI
 import gov.cdc.prime.router.azure.ReceiverAPI
-import gov.cdc.prime.router.azure.SenderAPI
 import gov.cdc.prime.router.common.Environment
+import gov.cdc.prime.router.common.JacksonMapperUtilities
 import org.apache.http.HttpStatus
 import java.io.File
 import java.time.OffsetDateTime
@@ -104,7 +102,7 @@ abstract class SettingCommand(
     enum class Operation { LIST, GET, PUT, DELETE }
     enum class SettingType { ORGANIZATION, SENDER, RECEIVER }
 
-    val jsonMapper = jacksonObjectMapper()
+    val jsonMapper = JacksonMapperUtilities.allowUnknownsMapper
     val yamlMapper: ObjectMapper = ObjectMapper(YAMLFactory()).registerModule(
         KotlinModule.Builder()
             .withReflectionCacheSize(512)
@@ -116,9 +114,6 @@ abstract class SettingCommand(
     )
 
     init {
-        // Format OffsetDateTime as an ISO string
-        jsonMapper.registerModule(JavaTimeModule())
-        jsonMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
         yamlMapper.registerModule(JavaTimeModule())
         yamlMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
     }
@@ -169,7 +164,7 @@ abstract class SettingCommand(
                         val version = if (result.value.obj().has("version"))
                             result.value.obj().getInt("version")
                         else
-                            result.value.obj().getJSONObject("meta").getInt("version")
+                            "[unknown - legacy data]"
                         "Success. Setting $settingName at version $version"
                     }
                     HttpStatus.SC_CREATED -> "Success. Created $settingName\n"
@@ -418,7 +413,7 @@ abstract class SettingCommand(
                 Pair(organization.name, jsonMapper.writeValueAsString(organization))
             }
             SettingType.SENDER -> {
-                val sender = mapper.readValue(input, SenderAPI::class.java)
+                val sender = mapper.readValue(input, Sender::class.java)
                 Pair(sender.fullName, jsonMapper.writeValueAsString(sender))
             }
             SettingType.RECEIVER -> {
@@ -436,7 +431,7 @@ abstract class SettingCommand(
                 yamlMapper.writeValueAsString(organization)
             }
             SettingType.SENDER -> {
-                val sender = jsonMapper.readValue(output, SenderAPI::class.java)
+                val sender = jsonMapper.readValue(output, Sender::class.java)
                 return yamlMapper.writeValueAsString(sender)
             }
             SettingType.RECEIVER -> {
@@ -450,31 +445,57 @@ abstract class SettingCommand(
      * Echo information to the console respecting the --silent flag
      */
     fun echo(message: String) {
-        if (!silent) TermUi.echo(message)
+        // clickt moved the echo command into the CliktCommand class, which means this needs to call
+        // into the parent class, but Kotlin doesn't allow calls to super with default parameters
+        if (!silent) super.echo(
+            message,
+            trailingNewline = true,
+            err = false,
+            currentContext.console.lineSeparator
+        )
     }
 
     /**
      * Echo verbose information to the console respecting the --silent and --verbose flag
      */
     fun verbose(message: String) {
-        if (verbose) TermUi.echo(message)
+        try {
+            if (verbose) echo(message)
+        } catch (e: IllegalStateException) {
+            // ignore this error that can occur if directly calling SettingsCommands (e.g. put) rather than from cmdline
+        }
     }
 
     /**
      * Abort the program with the message
      */
     fun abort(message: String): Nothing {
-        if (silent)
-            throw ProgramResult(statusCode = 1)
-        else
+        try {
+            if (silent)
+                throw ProgramResult(statusCode = 1)
+            else
+                throw PrintMessage(message, error = true)
+        } catch (e: IllegalStateException) {
+            // The if (silent) test can cause this exception if directly calling SettingsCommands, and not from cmdline.
             throw PrintMessage(message, error = true)
+        }
     }
 
     /**
      * Confirm to continue or abort, if not in --silent mode. Display the [abortMessage] if exiting.
      */
     fun confirm(message: String = "Perform the above changes", abortMessage: String = "No change applied") {
-        if (!silent && TermUi.confirm(message) == false) {
+        // Clikt moved the TermUI library internal, and exposed methods on CliktCommand instead, so we
+        // can call super to get the same functionality, BUT calls to super in Kotlin don't allow you
+        // to use default parameter values, so we have to explicitly define them here
+        if (!silent && super.confirm(
+                message,
+                default = false,
+                abort = false,
+                promptSuffix = ": ",
+                showDefault = true
+            ) == false
+        ) {
             abort(abortMessage)
         }
     }
@@ -922,7 +943,7 @@ class GetMultipleSettings : SettingCommand(
         // get senders and receivers per org
         val deepOrganizations = organizations.map { org ->
             val sendersJson = getMany(environment, accessToken, SettingType.SENDER, org.name)
-            val orgSenders = jsonMapper.readValue(sendersJson, Array<SenderAPI>::class.java).map { Sender(it) }
+            val orgSenders = jsonMapper.readValue(sendersJson, Array<Sender>::class.java).map { it.makeCopy() }
             val receiversJson = getMany(environment, accessToken, SettingType.RECEIVER, org.name)
             val orgReceivers = jsonMapper.readValue(receiversJson, Array<ReceiverAPI>::class.java).map { Receiver(it) }
             DeepOrganization(org, orgSenders, orgReceivers)

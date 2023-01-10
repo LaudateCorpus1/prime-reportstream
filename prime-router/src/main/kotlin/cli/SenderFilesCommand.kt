@@ -1,10 +1,7 @@
 package gov.cdc.prime.router.cli
 
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.module.kotlin.jacksonMapperBuilder
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.PrintMessage
-import com.github.ajalt.clikt.output.TermUi
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
@@ -18,9 +15,12 @@ import com.github.kittinunf.result.onError
 import gov.cdc.prime.router.azure.HttpUtilities
 import gov.cdc.prime.router.azure.SenderFilesFunction
 import gov.cdc.prime.router.common.Environment
+import gov.cdc.prime.router.common.JacksonMapperUtilities
 import gov.cdc.prime.router.messages.ReportFileMessage
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import kotlin.io.path.Path
 import kotlin.io.path.name
 
@@ -42,6 +42,10 @@ class SenderFilesCommand : CliktCommand(
 
     private val reportFileNameArg by option(
         "--report-file-name", help = "File name of the receiver report", metavar = "file-name"
+    )
+
+    private val messageIdArg by option(
+        "--message-id", help = "Message-id (uuid format) of the message", metavar = "message-id"
     )
 
     private val offsetArg by option(
@@ -77,9 +81,7 @@ class SenderFilesCommand : CliktCommand(
         help = "Do not echo progress or prompt for confirmation"
     ).flag(default = false)
 
-    private val jsonMapper = jacksonMapperBuilder()
-        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-        .build()
+    private val jsonMapper = JacksonMapperUtilities.allowUnknownsMapper
 
     private val environment = lazy { Environment.get(env) }
     private val accessToken = lazy {
@@ -142,6 +144,7 @@ class SenderFilesCommand : CliktCommand(
         val params = mutableListOf<Pair<String, String>>()
         reportIdArg?.let { params.add(SenderFilesFunction.REPORT_ID_PARAM to it) }
         reportFileNameArg?.let { params.add(SenderFilesFunction.REPORT_FILE_NAME_PARAM to it) }
+        messageIdArg?.let { params.add(SenderFilesFunction.MESSAGE_ID_PARAM to it) }
         offsetArg?.let { params.add(SenderFilesFunction.OFFSET_PARAM to it) }
         limitArg?.let { params.add(SenderFilesFunction.LIMIT_PARAM to it) }
         if (onlyReportItemsFlag) params.add(SenderFilesFunction.ONLY_REPORT_ITEMS to "true")
@@ -158,8 +161,21 @@ class SenderFilesCommand : CliktCommand(
             if (dirAndFileName.size != 3) error("Path of blob does not have 2 directories as expected")
             createDirectory(Path(outDirectory, dirAndFileName[0]))
             createDirectory(Path(outDirectory, dirAndFileName[0], dirAndFileName[1]))
+            var dateTimeDownload = ""
+            if (!messageIdArg.isNullOrEmpty()) {
+                dateTimeDownload = LocalDateTime.now().format(
+                    DateTimeFormatter.ofPattern(
+                        "yyyyMMddHHmmssSS"
+                    )
+                ).toString()
+            }
             saveFile(
-                Path(outDirectory, dirAndFileName[0], dirAndFileName[1], dirAndFileName[2]),
+                Path(
+                    outDirectory, dirAndFileName[0], dirAndFileName[1],
+                    dateTimeDownload
+                        .plus("_")
+                        .plus(dirAndFileName[2])
+                ),
                 reportFileMessage.content
             )
         }
@@ -184,26 +200,44 @@ class SenderFilesCommand : CliktCommand(
     }
 
     /**
-     * Save a file at the [filePath] Path with [content]. Respect the [overwrite] flag.
+     * Save a file at the [filePath] Path with [content]. Respect the [overwrite] flag or if [messageIdArg] is not
+     * blank. User may need multiple results from same file.
      */
     private fun saveFile(filePath: Path, content: String) {
-        if (!overwrite && Files.exists(filePath)) error("${filePath.fileName} already exists")
-        echo("Writing: $filePath")
-        Files.writeString(filePath, content)
+        if (!overwrite && Files.exists(filePath)) {
+            error("${filePath.fileName} already exists")
+        } else {
+            echo("Writing: $filePath")
+            Files.writeString(filePath, content)
+        }
     }
 
     /**
      * Echo verbose information to the console respecting the --silent and --verbose flag
      */
     private fun echo(message: String) {
-        if (!silent) TermUi.echo(message)
+        // clikt moved the echo command into the CliktCommand class, which means this needs to call
+        // into the parent class, but Kotlin doesn't allow calls to super with default parameters
+        if (!silent) super.echo(
+            message,
+            trailingNewline = true,
+            err = false,
+            currentContext.console.lineSeparator
+        )
     }
 
     /**
      * Echo verbose information to the console respecting the --silent and --verbose flag
      */
     private fun verbose(message: String) {
-        if (verbose) TermUi.echo(message)
+        // clikt moved the echo command into the CliktCommand class, which means this needs to call
+        // into the parent class, but Kotlin doesn't allow calls to super with default parameters
+        if (verbose) super.echo(
+            message,
+            trailingNewline = true,
+            err = false,
+            currentContext.console.lineSeparator
+        )
     }
 
     /**

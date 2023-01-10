@@ -1,0 +1,119 @@
+name: Validate Resources
+
+on:
+  pull_request:
+    branches:
+      - production
+      - master
+      - test
+  push:
+    branches:
+      - production
+      - master
+      - test
+  schedule:
+    - cron: "36 3 * * *"
+
+jobs:
+  pre_job:
+    name: Set Build Environment
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ env.VALIDATE_ENV }}
+    steps:
+      - name: Check out changes
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+
+      - name: Build vars
+        id: build_vars
+        uses: ./.github/actions/build-vars
+
+      - name: Force env if schedule
+        shell: bash
+        run: |
+          if [[ ${{ github.event_name == 'schedule' }} == 'true' ]]; then
+            echo "VALIDATE_ENV=prod" >> $GITHUB_ENV
+          else
+            echo "VALIDATE_ENV=${{ steps.build_vars.outputs.env_name }}" >> $GITHUB_ENV
+          fi
+
+  validate_dns:
+    name: Check resources for ${{ needs.pre_job.outputs.env_name }}
+    if: needs.pre_job.outputs.env_name
+    needs:
+      - pre_job
+    environment: ${{ needs.pre_job.outputs.env_name }}
+    concurrency: ${{ needs.pre_job.outputs.env_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Out Changes
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+
+      - name: Connect to VPN and login to Azure
+        uses: ./.github/actions/vpn-azure
+        with:
+          env-name: ${{ needs.pre_job.outputs.env_name }}
+          tls-key: ${{ secrets.TLS_KEY }}
+          ca-cert: ${{ secrets.CA_CRT}}
+          user-crt: ${{ secrets.USER_CRT }}
+          user-key: ${{ secrets.USER_KEY }}
+          sp-creds: ${{ secrets.SERVICE_PRINCIPAL_CREDS }}
+
+      - name: Restart DNS if failure
+        uses: nick-fields/retry@3e91a01664abd3c5cd539100d10d33b9c5b68482
+        with:
+          timeout_seconds: 60
+          max_attempts: 3
+          retry_wait_seconds: 180
+          command: dig google.com @10.0.2.4
+          shell: bash
+          on_retry_command: >-
+            az container stop --name pdh${{ needs.pre_job.outputs.env_name }}-dns
+            -g prime-data-hub-${{ needs.pre_job.outputs.env_name }};
+            az container start --name pdh${{ needs.pre_job.outputs.env_name }}-dns
+            -g prime-data-hub-${{ needs.pre_job.outputs.env_name }};
+
+      - name: Restart legacy SFTP if wrong ip
+        if: needs.pre_job.outputs.env_name != 'prod'
+        uses: nick-fields/retry@3e91a01664abd3c5cd539100d10d33b9c5b68482
+        with:
+          timeout_seconds: 60
+          max_attempts: 3
+          retry_wait_seconds: 180
+          command: |
+            ip=$(az container show --name pdh${{ needs.pre_job.outputs.env_name }}-sftpserver \
+            -g prime-data-hub-${{ needs.pre_job.outputs.env_name }} -o tsv --query 'ipAddress.ip')
+            last_octet=${ip: -2}
+            if [[ $last_octet -ne 20 ]]; then exit 1; fi
+          shell: bash
+          on_retry_command: >-
+            az container stop --name pdh${{ needs.pre_job.outputs.env_name }}-sftpserver
+            -g prime-data-hub-${{ needs.pre_job.outputs.env_name }};
+            az container start --name pdh${{ needs.pre_job.outputs.env_name }}-sftpserver
+            -g prime-data-hub-${{ needs.pre_job.outputs.env_name }};
+
+  optimize_demo_dbs:
+    name: Optimize demo databases
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env_name: [ demo1, demo2, demo3 ]
+    steps:
+      - uses: azure/login@92a5484dfaf04ca78a94597f4f19fea633851fa2
+        with:
+          creds: ${{ secrets.SERVICE_PRINCIPAL_CREDS }}
+
+      - name: Reduce database replica sizes
+        uses: nick-fields/retry@3e91a01664abd3c5cd539100d10d33b9c5b68482
+        with:
+          timeout_minutes: 180
+          max_attempts: 3
+          retry_wait_seconds: 1800
+          command: |
+            REPLICA_COUNT=$(az postgres server list -g prime-data-hub-${{ matrix.env_name }} --query '[*].name' | \
+            jq '[.[] | select(contains("pgsql-replica"))] | length')
+            if [[ ${REPLICA_COUNT} -gt 0 ]]; then
+              az postgres server update -g prime-data-hub-${{ matrix.env_name }} -n pdh${{ matrix.env_name }}-pgsql-replica --sku-name GP_Gen5_4
+            fi
+          shell: bash

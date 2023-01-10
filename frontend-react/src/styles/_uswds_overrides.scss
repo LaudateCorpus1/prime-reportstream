@@ -75,6 +75,12 @@ main {
   color: #005ea2;
 }
 
+// Breadcrumb
+
+.usa-breadcrumb {
+  margin-top: units(2);
+}
+
 // TYPOGRAPHY
 
 .usa-prose {
@@ -88,14 +94,10 @@ main {
   line-height: units(4);
 }
 
-.usa-process-list__heading {
-  @include u-font('sans', 'md');
-}
-
 // ALERT
 
 .usa-site-alert {
-  
+
   .usa-alert__heading {
     font-size: size('body', 'md');
   }
@@ -219,5 +221,9 @@ main {
   }
   h2 {
     @include u-line-height('sans', 3);
+  }
+  .usa-breadcrumb {
+    margin-top: 0;
+    padding-top: 0;
   }
 }

@@ -4,10 +4,8 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jose.jwk.KeyType
 import gov.cdc.prime.router.Sender
-import gov.cdc.prime.router.common.Environment
 import io.jsonwebtoken.Jwts
 import java.io.File
-import java.net.URL
 import java.security.PrivateKey
 import java.util.Date
 import java.util.UUID
@@ -26,7 +24,7 @@ class SenderUtils {
             keyId: String,
             expirationSecondsFromNow: Int = 300,
         ): String {
-            val jws = Jwts.builder()
+            val jwsObj = Jwts.builder()
                 .setHeaderParam("kid", keyId) // kid
                 .setHeaderParam("typ", "JWT") // typ
                 .setIssuer(sender.fullName) // iss
@@ -34,11 +32,17 @@ class SenderUtils {
                 .setAudience(baseUrl) // aud
                 .setExpiration(Date(System.currentTimeMillis() + expirationSecondsFromNow * 1000)) // exp
                 .setId(UUID.randomUUID().toString()) // jti
-                .signWith(privateKey).compact()
+                .signWith(privateKey)
+            val jws = jwsObj.compact()
             return jws
         }
 
-        fun generateSenderUrlParameters(senderToken: String, scope: String): Map<String, String> {
+        /**
+         * [senderToken] is a signed JWT from this sender, to go to the api/token endpoint.
+         * [scope] is the desired scope being requested.   See [Scope] for details on format.
+         * @return a map of the standard parameters needed to create an acceptable token request.
+         */
+        private fun generateSenderUrlParameterMap(senderToken: String, scope: String): Map<String, String> {
             return mapOf<String, String>(
                 "scope" to scope,
                 "grant_type" to "client_credentials",
@@ -47,12 +51,14 @@ class SenderUtils {
             )
         }
 
-        fun generateSenderUrl(environment: Environment, senderToken: String, scope: String): URL {
-            return URL(
-                environment.formUrl("api/token").toString() + "?" +
-                    generateSenderUrlParameters(senderToken, scope)
-                        .map { "${it.key}=${it.value}" }.joinToString("&")
-            )
+        /**
+         * [senderToken] is a signed JWT from this sender, to go to the api/token endpoint.
+         * [scope] is the desired scope being requested.   See [Scope] for details on format.
+         * @return a string of the standard parameters needed to create an acceptable token request.
+         */
+        fun generateSenderUrlParameterString(senderToken: String, scope: String): String {
+            return generateSenderUrlParameterMap(senderToken, scope)
+                .map { "${it.key}=${it.value}" }.joinToString("&")
         }
 
         fun readPublicKeyPemFile(pemFile: File): Jwk {

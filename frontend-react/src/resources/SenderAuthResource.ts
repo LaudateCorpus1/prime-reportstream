@@ -1,12 +1,10 @@
-import {
-    getStoredOktaToken,
-    getStoredOrg,
-} from "../components/GlobalContextProvider";
+import { getStoredOktaToken, getStoredOrg } from "../utils/SessionStorageTools";
+import { getAppInsightsHeaders } from "../TelemetryService";
 
 import AuthResource from "./AuthResource";
 
 export default class SenderAuthResource extends AuthResource {
-    pk(parent?: any, key?: string): string | undefined {
+    pk(_parent?: any, _key?: string): string | undefined {
         throw new Error("Method not implemented.");
     }
 
@@ -18,8 +16,9 @@ export default class SenderAuthResource extends AuthResource {
             ...init,
             headers: {
                 ...init.headers,
+                ...getAppInsightsHeaders(),
                 Authorization: `Bearer ${accessToken}`,
-                Organization: organization,
+                Organization: organization || "",
                 "authentication-type": "okta",
             },
         };

@@ -30,7 +30,11 @@ import com.sendgrid.helpers.mail.Mail
 import com.sendgrid.helpers.mail.objects.Email
 import com.sendgrid.helpers.mail.objects.Personalization
 import gov.cdc.prime.router.azure.db.enums.SettingType
+import gov.cdc.prime.router.common.BaseEngine
 import gov.cdc.prime.router.secrets.SecretHelper
+import gov.cdc.prime.router.tokens.oktaMembershipClaim
+import gov.cdc.prime.router.tokens.oktaSystemAdminGroup
+import gov.cdc.prime.router.tokens.subjectClaim
 import org.json.JSONObject
 import java.io.IOException
 import java.time.OffsetDateTime
@@ -45,9 +49,6 @@ const val FROM_EMAIL = "reportstream@cdc.gov"
 const val SUBJECT_EMAIL = "ReportStream Daily Email"
 const val FIVE_MINUTES_IN_SECONDS = 5 * 60
 const val AUTH_KEY = "Bearer "
-const val ORG_CLAIM = "organization"
-const val USER_CLAIM = "sub"
-const val ADMIN_GRP = "DHPrimeAdmins"
 
 data class EmailSchedule(
     val template: String,
@@ -79,7 +80,7 @@ class EmailScheduleEngine {
         var ret = request.createResponseBuilder(HttpStatus.UNAUTHORIZED)
 
         if (!user.isNullOrEmpty()) {
-            val id = WorkflowEngine.databaseAccessSingleton.insertEmailSchedule(request.body, user)
+            val id = BaseEngine.databaseAccessSingleton.insertEmailSchedule(request.body, user)
             ret.status(HttpStatus.CREATED)
             ret.body("$id")
         }
@@ -104,7 +105,7 @@ class EmailScheduleEngine {
         var ret = request.createResponseBuilder(HttpStatus.UNAUTHORIZED)
 
         if (!user.isNullOrEmpty()) {
-            val id = WorkflowEngine.databaseAccessSingleton.deleteEmailSchedule(scheduleId)
+            val id = BaseEngine.databaseAccessSingleton.deleteEmailSchedule(scheduleId)
             ret.status(HttpStatus.OK)
             ret.body("$id")
         }
@@ -133,7 +134,7 @@ class EmailScheduleEngine {
 
         // get the schedules to fire
         val schedulesToFire: Iterable<EmailSchedule> =
-            WorkflowEngine.databaseAccessSingleton
+            BaseEngine.databaseAccessSingleton
                 .fetchEmailSchedules()
                 .map { mapper.readValue<EmailSchedule>(it) }
                 .filter { shouldFire(it) }
@@ -267,8 +268,8 @@ class EmailScheduleEngine {
                 // get the user name
                 @Suppress("UNCHECKED_CAST")
                 user =
-                    if ((jwt.claims[ORG_CLAIM] as List<String>).contains(ADMIN_GRP))
-                        jwt.claims[USER_CLAIM].toString()
+                    if ((jwt.claims[oktaMembershipClaim] as List<String>).contains(oktaSystemAdminGroup))
+                        jwt.claims[subjectClaim].toString()
                     else null
             } catch (ex: Throwable) {
                 logger.log(Level.WARNING, "Error in verification of token", ex)

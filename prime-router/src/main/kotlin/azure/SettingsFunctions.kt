@@ -8,7 +8,10 @@ import com.microsoft.azure.functions.annotation.AuthorizationLevel
 import com.microsoft.azure.functions.annotation.BindingName
 import com.microsoft.azure.functions.annotation.FunctionName
 import com.microsoft.azure.functions.annotation.HttpTrigger
+import gov.cdc.prime.router.Sender
+import gov.cdc.prime.router.azure.db.enums.SettingType
 import gov.cdc.prime.router.tokens.OktaAuthentication
+import gov.cdc.prime.router.tokens.PrincipalLevel
 import org.apache.logging.log4j.kotlin.Logging
 
 /*
@@ -52,9 +55,8 @@ class GetOneOrganization(
         ) request: HttpRequestMessage<String?>,
         @BindingName("organizationName") organizationName: String,
     ): HttpResponseMessage {
-        // Is the API user an Okta Sender?
-        val oktaSender = request.headers["authentication-type"] == "okta"
-        return getOne(request, organizationName, OrganizationAPI::class.java, null, oktaSender)
+        // Counter-intuitive:  this fails if you pass the organizationName as the organizationName. ;)
+        return getOne(request, organizationName, OrganizationAPI::class.java, null)
     }
 }
 
@@ -99,7 +101,7 @@ class GetSenders(
         ) request: HttpRequestMessage<String?>,
         @BindingName("organizationName") organizationName: String,
     ): HttpResponseMessage {
-        return getList(request, organizationName, SenderAPI::class.java)
+        return getList(request, organizationName, Sender::class.java)
     }
 }
 
@@ -119,9 +121,7 @@ class GetOneSender(
         @BindingName("organizationName") organizationName: String,
         @BindingName("senderName") senderName: String,
     ): HttpResponseMessage {
-        // Is the API user an Okta Sender?
-        val oktaSender = request.headers["authentication-type"] == "okta"
-        return getOne(request, senderName, SenderAPI::class.java, organizationName, oktaSender)
+        return getOne(request, senderName, Sender::class.java, organizationName)
     }
 }
 
@@ -144,7 +144,7 @@ class UpdateSender(
         return updateOne(
             request,
             senderName,
-            SenderAPI::class.java,
+            Sender::class.java,
             organizationName
         )
     }
@@ -219,6 +219,50 @@ class UpdateReceiver(
 }
 
 /**
+ * Get a history of revisions for an Org's settings (by type).
+ * It includes all the Setting data for the full history to enable
+ * quick client diffs across revisions.
+ *
+ * Type returned depends on the request settingSelector parameter.
+ * ALL named settings are return and the caller must group accordingly.
+ * Return ALL names solves the problem where knowing a deleted name become impossible
+ *
+ * From the OpenAPI view, this is just 3 different api calls
+ *   `settings/revision/organizations/{organizationName}/sender`
+ *   `settings/revision/organizations/{organizationName}/receiver`
+ *   `settings/revision/organizations/{organizationName}/organization`
+
+ *   @param settingsFacade Same pattern as the rest of the funs in this module
+ *   @param oktaAuthentication Default to require org admin, caller can override
+ *   @return Spring HttpTrigger call
+ */
+class GetSettingRevisionHistory(
+    settingsFacade: SettingsFacade = SettingsFacade.common,
+    oktaAuthentication: OktaAuthentication = OktaAuthentication(PrincipalLevel.ORGANIZATION_ADMIN)
+) :
+    BaseFunction(settingsFacade, oktaAuthentication) {
+    @FunctionName("getSettingRevisionHistory")
+    fun run(
+        @HttpTrigger(
+            name = "getSettingRevisionHistory",
+            methods = [HttpMethod.GET],
+            authLevel = AuthorizationLevel.ANONYMOUS,
+            route = "waters/org/{organizationName}/settings/revs/{settingSelector}"
+        ) request: HttpRequestMessage<String?>,
+        @BindingName("organizationName") organizationName: String,
+        @BindingName("settingSelector") settingSelector: String
+    ): HttpResponseMessage {
+        try {
+            // verify the settingsTypeString is in the allowed setting enumeration.
+            val settingType = SettingType.valueOf(settingSelector.uppercase())
+            return getListHistory(request, organizationName, settingType)
+        } catch (e: EnumConstantNotPresentException) {
+            return HttpUtilities.badRequestResponse(request, "Invalid setting selector parameter")
+        }
+    }
+}
+
+/**
  * Common Settings API
  */
 
@@ -245,9 +289,28 @@ open class BaseFunction(
         organizationName: String,
         clazz: Class<T>
     ): HttpResponseMessage {
-        return oktaAuthentication.checkAccess(request, "") {
+        return oktaAuthentication.checkAccess(request, organizationName) {
             val (result, outputBody) = facade.findSettingsAsJson(organizationName, clazz)
             facadeResultToResponse(request, result, outputBody)
+        }
+    }
+
+    /**
+     * Returns all revisions of a settings (version) for an org/settingName
+     * Handles Auth
+     * @param request Incoming http request
+     * @param organizationName Org name to auth again and use for query
+     * @param settingType SettingType
+     * @result HttpResponseMessage resulting json or HTTP error response
+     */
+    fun getListHistory(
+        request: HttpRequestMessage<String?>,
+        organizationName: String,
+        settingType: SettingType
+    ): HttpResponseMessage {
+        return oktaAuthentication.checkAccess(request, organizationName) {
+            val settings = facade.findSettingHistoryAsJson(organizationName, settingType)
+            HttpUtilities.okResponse(request, settings, facade.getLastModified())
         }
     }
 
@@ -260,19 +323,22 @@ open class BaseFunction(
         }
     }
 
+    /**
+     * Return a single setting. Separated from http request for testability reasons
+     * @param request Http request
+     * @param settingName Name column in Setting table to match
+     * @param clazz The class used to convert to Json
+     * @param organizationName Mapped to organzationId then used to select the organization_id column
+     * @return HttpResponseMessage The resulting json or HTTP error response
+     */
     fun <T : SettingAPI> getOne(
         request: HttpRequestMessage<String?>,
         settingName: String,
         clazz: Class<T>,
         organizationName: String? = null,
-        oktaSender: Boolean = false
     ): HttpResponseMessage {
-        return oktaAuthentication.checkAccess(request, organizationName ?: settingName, oktaSender) {
-            // if the user is an okta sender, their organization name matches the okta group naming schema
-            // it would be something like "ignore.ignore-waters", where "ignore" is the organization name
-            // split the organizationName to get the correct organization to find in the settings database
-            val settingValue = if (oktaSender) settingName.split(".")[0] else settingName
-            val setting = facade.findSettingAsJson(settingValue, clazz, organizationName)
+        return oktaAuthentication.checkAccess(request, organizationName ?: settingName) {
+            val setting = facade.findSettingAsJson(settingName, clazz, organizationName)
                 ?: return@checkAccess HttpUtilities.notFoundResponse(request)
             HttpUtilities.okResponse(request, setting)
         }

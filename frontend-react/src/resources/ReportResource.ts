@@ -1,5 +1,9 @@
+import config from "../config";
+
 import ActionResource from "./ActionResource";
 import AuthResource from "./AuthResource";
+
+const { RS_API_URL } = config;
 
 export default class ReportResource extends AuthResource {
     readonly sent: number = 1;
@@ -20,9 +24,24 @@ export default class ReportResource extends AuthResource {
     readonly fileName: string = "";
     readonly mimeType: string = "";
 
+    constructor(
+        reportId?: string,
+        sent?: number,
+        expires?: number,
+        total?: number,
+        fileType?: string
+    ) {
+        super();
+        this.reportId = reportId || "";
+        this.sent = sent || 0;
+        this.expires = expires || 0;
+        this.total = total || 0;
+        this.fileType = fileType || "";
+    }
+
     pk() {
         return this.reportId;
     }
 
-    static urlRoot = `${process.env.REACT_APP_BACKEND_URL}/api/history/report`;
+    static urlRoot = `${RS_API_URL}/api/history/report`;
 }

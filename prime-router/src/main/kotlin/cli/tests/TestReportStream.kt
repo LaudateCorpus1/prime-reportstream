@@ -2,27 +2,35 @@ package gov.cdc.prime.router.cli.tests
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.output.TermUi
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.validate
 import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.clikt.parameters.types.int
+import gov.cdc.prime.router.ClientSource
+import gov.cdc.prime.router.CovidSender
 import gov.cdc.prime.router.FileSettings
+import gov.cdc.prime.router.FullELRSender
 import gov.cdc.prime.router.Metadata
 import gov.cdc.prime.router.Receiver
 import gov.cdc.prime.router.ReportId
+import gov.cdc.prime.router.TopicSender
 import gov.cdc.prime.router.azure.DataAccessTransaction
 import gov.cdc.prime.router.azure.DatabaseAccess
 import gov.cdc.prime.router.azure.WorkflowEngine
+import gov.cdc.prime.router.azure.db.Tables
 import gov.cdc.prime.router.azure.db.Tables.ACTION
-import gov.cdc.prime.router.azure.db.Tables.REPORT_FILE
+import gov.cdc.prime.router.azure.db.Tables.ACTION_LOG
 import gov.cdc.prime.router.azure.db.Tables.REPORT_LINEAGE
+import gov.cdc.prime.router.azure.db.enums.ActionLogType
 import gov.cdc.prime.router.azure.db.enums.TaskAction
 import gov.cdc.prime.router.azure.db.tables.pojos.Action
 import gov.cdc.prime.router.common.Environment
 import gov.cdc.prime.router.common.SystemExitCodes
+import gov.cdc.prime.router.history.DetailedActionLog
+import gov.cdc.prime.router.history.DetailedSubmissionHistory
+import gov.cdc.prime.router.history.azure.DatabaseSubmissionsAccess
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -31,6 +39,7 @@ import org.jooq.impl.DSL.max
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.time.OffsetDateTime
+import java.util.UUID
 import kotlin.system.exitProcess
 import kotlin.system.measureTimeMillis
 
@@ -209,7 +218,7 @@ Examples:
             coolTestList.filter { it.status == TestStatus.SMOKE }
         }
         if (tests.isNotEmpty()) {
-            TermUi.echo(
+            echo(
                 CoolTest.uglyMsgFormat("Running the following tests, POSTing to ${environment.url}:")
             )
             printTestList(tests)
@@ -267,13 +276,13 @@ Examples:
         }
 
         if (failures.isNotEmpty()) {
-            TermUi.echo(
+            echo(
                 CoolTest
-                    .badMsgFormat("*** Tests FAILED:  ${failures.map { it.name }.joinToString(",")} ***")
+                    .badMsgFormat("*** Tests FAILED:  ${failures.joinToString(",") { it.name }} ***")
             )
             exitProcess(SystemExitCodes.FAILURE.exitCode)
         } else {
-            TermUi.echo(
+            echo(
                 CoolTest.goodMsgFormat("All tests passed")
             )
         }
@@ -285,7 +294,8 @@ Examples:
             SftpcheckTest(),
             End2End(),
             Merge(),
-            WatersAuthTests(),
+            Server2ServerAuthTests(),
+            OktaAuthTests(),
             QualityFilter(),
             Hl7Null(),
             TooManyCols(),
@@ -312,6 +322,7 @@ Examples:
             DbConnectionsLoad(),
             LongLoad(),
             ABot(),
+            LivdApiTest()
         )
     }
 }
@@ -337,9 +348,37 @@ abstract class CoolTest {
     var outputToConsole = false
 
     /**
+     * Clikt has hidden the TermUI namespace which we were depending on. This function property
+     * allows us to wire it into TermUI if we want, but for now, the logic exactly mirrors what's in
+     * the TermUI echo function.
+     */
+    var echoFn: (
+        message: Any?,
+        trailingNewline: Boolean,
+        err: Boolean,
+        lineSeparator: String
+    ) -> Unit = fun(
+        /** [message] is what you want to write to the command line. it will have `toString` called on it */
+        message: Any?,
+        /** Flag for appending a trailing newline to the what you're writing to the output stream */
+        trailingNewline: Boolean,
+        /** Flag for whether or not to write to stderr instead of stdout */
+        err: Boolean,
+        /** The line separator, typically \n, though could be \r\n if you're on Windows */
+        lineSeparator: String
+    ) {
+        // munge the text
+        val text = message?.toString()?.replace(Regex("\r?\n"), lineSeparator) ?: "null"
+        // get the stream per error or out
+        val stream = if (err) System.err else System.out
+        // write it out
+        stream.print(if (trailingNewline) text + lineSeparator else text)
+    }
+
+    /**
      * Stores a list of output messages instead of printing the messages to the console.
      */
-    private val outputMsgs = mutableListOf<String>()
+    val outputMsgs = mutableListOf<String>()
 
     abstract suspend fun run(
         environment: Environment,
@@ -353,7 +392,7 @@ abstract class CoolTest {
      */
     private fun storeMsg(msg: String) {
         if (outputToConsole)
-            TermUi.echo(msg)
+            echoFn(msg, true, false, "\n")
         else
             outputMsgs.add(msg)
     }
@@ -362,7 +401,7 @@ abstract class CoolTest {
      * Output all messages to the console.
      */
     fun outputAllMsgs() {
-        outputMsgs.forEach { TermUi.echo(it) }
+        outputMsgs.forEach { echoFn(it, true, false, "\n") }
     }
 
     /**
@@ -429,9 +468,9 @@ abstract class CoolTest {
         reportId: ReportId,
         maxPollSecs: Int = 180,
         pollSleepSecs: Int = 20,
-    ): Map<ReportId, String?> {
+    ): Map<UUID, DetailedSubmissionHistory?> {
         var timeElapsedSecs = 0
-        var queryResult = emptyMap<ReportId, String?>()
+        var queryResult = emptyMap<UUID, DetailedSubmissionHistory?>()
         echo("Polling for ReportStream process results, looking for $reportId.  (Max poll time $maxPollSecs seconds)")
         val actualTimeElapsedMillis = measureTimeMillis {
             while (timeElapsedSecs <= maxPollSecs) {
@@ -502,8 +541,8 @@ abstract class CoolTest {
      */
     private fun queryForProcessResults(
         reportId: ReportId,
-    ): Map<ReportId, String?> {
-        var queryResult = emptyMap<ReportId, String?>()
+    ): Map<UUID, DetailedSubmissionHistory?> {
+        var queryResult = emptyMap<UUID, DetailedSubmissionHistory?>()
         db = WorkflowEngine().db
         db.transact { txn ->
             queryResult = processActionResultQuery(txn, reportId)
@@ -512,42 +551,33 @@ abstract class CoolTest {
     }
 
     /**
-     * Examine the [jsonResponse] from the process action, makes sure there is at least one destination reported
+     * Examine the [history] from the process action, makes sure there is at least one destination reported
      * and report any errors
-     * @param jsonResponse The json that was generated by the process function
      * @return true if there are no errors in the response, false otherwise
      */
-    fun examineProcessResponse(jsonResponse: String?): Boolean {
+    fun examineProcessResponse(history: DetailedSubmissionHistory?): Boolean {
 
         var passed = true
         try {
             // if there is no process response, this test fails
-            if (jsonResponse == null)
+            if (history == null)
                 return bad("Test Failed: No process response")
 
-            val tree = jacksonObjectMapper().readTree(jsonResponse)
-            val reportId = getReportIdFromResponse(jsonResponse)
+            val reportId = history.reportId
             echo("Id of submitted report: $reportId")
-            val topic = tree["topic"]
-            val errorCount = tree["errorCount"]
-            val destCount = tree["destinationCount"]
+            val topic = history.topic
+            val errorCount = history.errorCount
 
-            if (topic != null && !topic.isNull && topic.textValue().equals("covid-19", true)) {
+            if (topic != null && topic.equals("covid-19", true)) {
                 good("'topic' is in response and correctly set to 'covid-19'")
             } else {
                 passed = bad("***$name Test FAILED***: 'topic' is missing from response json")
             }
 
-            if (errorCount != null && !errorCount.isNull && errorCount.intValue() == 0) {
+            if (errorCount == 0) {
                 good("No errors detected.")
             } else {
                 passed = bad("***$name Test FAILED***: There were errors reported.")
-            }
-
-            if (destCount != null && !destCount.isNull && destCount.intValue() >= 0) {
-                good("Data going to be sent to one or more destinations.")
-            } else {
-                passed = bad("***$name Test FAILED***: There are no destinations set for sending the data.")
             }
 
             if (reportId == null) {
@@ -656,8 +686,8 @@ abstract class CoolTest {
     fun getReportIdFromResponse(jsonResponse: String): ReportId? {
         var reportId: ReportId? = null
         val tree = jacksonObjectMapper().readTree(jsonResponse)
-        if (!tree.isNull && !tree["id"].isNull) {
-            reportId = ReportId.fromString(tree["id"].textValue())
+        if (!tree.isNull && !tree["reportId"].isNull) {
+            reportId = ReportId.fromString(tree["reportId"].textValue())
         }
         return reportId
     }
@@ -670,7 +700,6 @@ abstract class CoolTest {
      * @return true if there are no errors in the response, false otherwise
      */
     fun examinePostResponse(jsonResponse: String, shouldHaveDestination: Boolean): Boolean {
-
         var passed = true
         try {
             val tree = jacksonObjectMapper().readTree(jsonResponse)
@@ -718,25 +747,47 @@ abstract class CoolTest {
             ?: error("Unable to find org $orgName in metadata")
         const val receivingStates = "IG"
 
+        const val fullELRSenderName = "ignore-full-elr"
+        val fullELRSender by lazy {
+            settings.findSender("$orgName.$fullELRSenderName") as? FullELRSender
+                ?: error("Unable to find sender $fullELRSenderName for organization ${org.name}")
+        }
+
         const val simpleReportSenderName = "ignore-simple-report"
-        val simpleRepSender = settings.findSender("$orgName.$simpleReportSenderName")
-            ?: error("Unable to find sender $simpleReportSenderName for organization ${org.name}")
+        val simpleRepSender by lazy {
+            settings.findSender("$orgName.$simpleReportSenderName") as? TopicSender
+                ?: error("Unable to find sender $simpleReportSenderName for organization ${org.name}")
+        }
 
         const val stracSenderName = "ignore-strac"
-        val stracSender = settings.findSender("$orgName.$stracSenderName")
-            ?: error("Unable to find sender $stracSenderName for organization ${org.name}")
+        val stracSender by lazy {
+            settings.findSender("$orgName.$stracSenderName") as? TopicSender
+                ?: error("Unable to find sender $stracSenderName for organization ${org.name}")
+        }
 
         const val watersSenderName = "ignore-waters"
-        val watersSender = settings.findSender("$orgName.$watersSenderName")
-            ?: error("Unable to find sender $watersSenderName for organization ${org.name}")
+        val watersSender by lazy {
+            settings.findSender("$orgName.$watersSenderName") as? TopicSender
+                ?: error("Unable to find sender $watersSenderName for organization ${org.name}")
+        }
 
         const val emptySenderName = "ignore-empty"
-        val emptySender = settings.findSender("$orgName.$emptySenderName")
-            ?: error("Unable to find sender $emptySenderName for organization ${org.name}")
+        val emptySender by lazy {
+            settings.findSender("$orgName.$emptySenderName") as? TopicSender
+                ?: error("Unable to find sender $emptySenderName for organization ${org.name}")
+        }
 
         const val hl7SenderName = "ignore-hl7"
-        val hl7Sender = settings.findSender("$orgName.$hl7SenderName")
-            ?: error("Unable to find sender $hl7SenderName for organization ${org.name}")
+        val hl7Sender by lazy {
+            settings.findSender("$orgName.$hl7SenderName") as? TopicSender
+                ?: error("Unable to find sender $hl7SenderName for organization ${org.name}")
+        }
+
+        const val hl7MonkeypoxSenderName = "ignore-monkeypox"
+        val hl7MonkeypoxSender by lazy {
+            settings.findSender("$orgName.$hl7MonkeypoxSenderName") as? TopicSender
+                ?: error("Unable to find sender $hl7MonkeypoxSenderName for organization ${org.name}")
+        }
 
         val csvReceiver = settings.receivers.filter { it.organizationName == orgName && it.name == "CSV" }[0]
         val hl7Receiver = settings.receivers.filter { it.organizationName == orgName && it.name == "HL7" }[0]
@@ -752,8 +803,14 @@ abstract class CoolTest {
         lateinit var allGoodReceivers: MutableList<Receiver>
         lateinit var allGoodCounties: String
         const val historyTestOrgName = "historytest"
-        val historyTestSender = settings.findSender("$historyTestOrgName.default")
-            ?: error("Unable to find sender $historyTestOrgName.default")
+        val historyTestSender = (
+            settings.findSender("$historyTestOrgName.default")
+                ?: error("Unable to find sender $historyTestOrgName.default")
+            ) as CovidSender
+        val defaultIgnoreSender = (
+            settings.findSender("$orgName.default")
+                ?: error("Unable to find sender $orgName.default")
+            ) as CovidSender
 
         fun initListOfGoodReceiversAndCounties() {
             allGoodReceivers = mutableListOf(csvReceiver, hl7Receiver, hl7BatchReceiver, hl7NullReceiver)
@@ -819,26 +876,47 @@ abstract class CoolTest {
          */
         fun processActionResultQuery(
             txn: DataAccessTransaction,
-            reportId: ReportId
-        ): Map<ReportId, String?> {
+            reportId: UUID
+        ): Map<UUID, DetailedSubmissionHistory?> {
             val ctx = DSL.using(txn)
 
             // get the reports generated by the 'process' step
             val processingReportIds = ctx.selectFrom(REPORT_LINEAGE)
                 .where(REPORT_LINEAGE.PARENT_REPORT_ID.eq(reportId))
                 .fetch(REPORT_LINEAGE.CHILD_REPORT_ID)
-
-            // get the action_response from the action table for the process task
-            val actionResponses = mutableMapOf<ReportId, String?>()
+            val actionResponses = mutableMapOf<UUID, DetailedSubmissionHistory?>()
             for (processingReportId in processingReportIds) {
-                val ret = ctx.select(ACTION.ACTION_RESPONSE)
-                    .from(ACTION)
-                    .join(REPORT_FILE)
-                    .on(ACTION.ACTION_ID.eq(REPORT_FILE.ACTION_ID))
-                    .and(REPORT_FILE.REPORT_ID.eq(processingReportId))
-                    .and(ACTION.ACTION_NAME.eq(TaskAction.process))
-                    .fetchOne(ACTION.ACTION_RESPONSE)
-                actionResponses[processingReportId] = ret?.toString()
+                val report = ctx.selectFrom(Tables.REPORT_FILE)
+                    .where(Tables.REPORT_FILE.REPORT_ID.eq(processingReportId))
+                    .fetchOne()
+                if (report != null && report.actionId != null) {
+                    val ret = ctx.select(
+                        DatabaseSubmissionsAccess().detailedSelect()
+                    )
+                        .from(ACTION)
+                        .where(
+                            ACTION.ACTION_NAME.eq(TaskAction.process)
+                                .and(ACTION.ACTION_ID.eq(report.actionId))
+                        )
+                        .fetchOne()?.into(DetailedSubmissionHistory::class.java)
+                    // Fill out the rest of the history data
+                    if (ret != null) {
+                        ret.reportId = processingReportId.toString()
+                        ret.reportItemCount = report.itemCount
+                        ret.externalName = report.externalName
+                        ret.topic = report.schemaTopic
+                        if (!report.sendingOrg.isNullOrBlank() && !report.sendingOrgClient.isNullOrBlank())
+                            ret.sender = ClientSource(report.sendingOrg, report.sendingOrgClient).name
+
+                        // Get errors and warnings
+                        ret.logs = ctx.selectFrom(ACTION_LOG).where(
+                            ACTION_LOG.ACTION_ID.eq(report.actionId)
+                                .and(ACTION_LOG.REPORT_ID.eq(processingReportId))
+                                .and(ACTION_LOG.TYPE.eq(ActionLogType.warning))
+                        ).fetchInto(DetailedActionLog::class.java)
+                    }
+                    actionResponses[processingReportId] = ret
+                } else actionResponses[processingReportId] = null
             }
 
             return actionResponses

@@ -52,6 +52,14 @@
       display: Blood specimen
     - code: 122554006
       display: Capillary blood specimen
+    - code: 258467004
+      display: Nasopharyngeal washings
+    - code: 418932006
+      display: Oral swab specimen
+    - code: 433801000124107
+      display: Nasopharyngeal and oropharyngeal swab
+    - code: 309171007
+      display: Lower respiratory fluid sample
 
 - name: covid-19/test_result
   system: SNOMED_CT
@@ -140,6 +148,48 @@
     - code: 261665006
       display: Unknown
 
+- name: covid-19/residence_type
+  system: SNOMED_CT
+  reference: HHS guidence and LOINC
+  referenceUrl: https://loinc.org/75617-1/
+  values:
+    - code: 22232009
+      display: Hospital
+    - code: 2081004
+      display: Hospital Ship
+    - code: 32074000
+      display: Long Term Care Hospital
+    - code: 224929004
+      display: Secure Hospital
+    - code: 42665001
+      display: Nursing Home
+    - code: 30629002
+      display: Retirement Home
+    - code: 74056004
+      display: Orphanage
+    - code: 722173008
+      display: Prison-based Care Site
+    - code: 20078004
+      display: Substance Abuse Treatment Center
+    - code: 257573002
+      display: Boarding House
+    - code: 224683003
+      display: Military Accommodation
+    - code: 284546000
+      display: Hospice
+    - code: 257628001
+      display: Hostel
+    - code: 310207003
+      display: Sheltered Housing
+    - code: 57656006
+      display: Penal Institution
+    - code: 285113009
+      display: Religious Institutional Residence
+    - code: 285141008
+      display: Work (environment)
+    - code: 32911000
+      display: Homeless
+
 - name: covid-19/aoe
   system: LOINC
   reference: HHS guidence on the LOINC codes to use for ask-on-entry questions
@@ -210,6 +260,15 @@
     - code: 31389004
       display: Oropharyngeal structure (body structure)
       version: 2020-09-01
+    - code: 39607008
+      display: Lung structure (body structure)
+      version: 2020-09-01
+    - code: 955009
+      display: Bronchial structure (body structure)
+      version: 2020-09-01
+    - code: 1797002
+      display: Structure of anterior nares (body structure)
+      version: 2002-01-31
 
 - name: covid-19/yesno
   # See YES, NO, UNK in the reference URL.

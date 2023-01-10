@@ -47,7 +47,10 @@ class MockHttpResponseMessage : HttpResponseMessage.Builder, HttpResponseMessage
     }
 }
 
-class MockHttpRequestMessage : HttpRequestMessage<String?> {
+class MockHttpRequestMessage(
+    val content: String? = null,
+    val method: HttpMethod = HttpMethod.GET
+) : HttpRequestMessage<String?> {
     val httpHeaders = mutableMapOf<String, String>()
     val parameters = mutableMapOf<String, String>()
 
@@ -56,19 +59,19 @@ class MockHttpRequestMessage : HttpRequestMessage<String?> {
     }
 
     override fun getHttpMethod(): HttpMethod {
-        return HttpMethod.GET
+        return method
     }
 
     override fun getHeaders(): Map<String, String> {
         return this.httpHeaders
     }
 
-    override fun getQueryParameters(): Map<String, String> {
+    override fun getQueryParameters(): MutableMap<String, String> {
         return this.parameters
     }
 
     override fun getBody(): String? {
-        return null
+        return content
     }
 
     override fun createResponseBuilder(var1: HttpStatus): HttpResponseMessage.Builder {

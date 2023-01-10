@@ -10,36 +10,36 @@
         {
             "title": "## 🔧 Backend",
             "labels": [
+                "api",
                 "backend",
-                "router",
                 "index",
                 "indexes",
-                "api",
-                "sender",
-                "schema"
+                "router",
+                "schema",
+                "sender"
             ]
         },
         {
             "title": "## 🚀 Pipelines",
             "labels": [
-                "DevOps", 
-                "deployment", 
-                "checks", 
-                "automated", 
-                "workflow", 
+                "automated",
+                "checks",
+                "deployment",
+                "DevOps",
+                "pipeline",
                 "scan",
-                "pipeline"
+                "workflow"
             ]
         },
         {
             "title": "## 🐛 Fixes",
             "labels": [
-                "fix", 
-                "fixed", 
+                "bug",
+                "correct",
+                "fix",
+                "fixed",
                 "fixes",
-                "fixing", 
-                "bug", 
-                "correct"
+                "fixing"
             ]
         },
         {
@@ -50,9 +50,36 @@
             ]
         },
         {
-            "title": "## 💸 Tech debt",
+            "title": "## 💸 Tech Debt",
             "labels": [
                 "tech-debt"
+            ]
+        },
+        {
+            "title": "## 🌐 Release Notes",
+            "labels": [
+                "customer",
+                "customer-facing",
+                "release",
+                "release-notes"
+            ]
+        },
+        {
+            "title": "## 📚 Documentation",
+            "labels": [
+                "instructions",
+                "documentation",
+                "document",
+                "docs",
+                "readme",
+                "playbook"
+            ]
+        },
+        {
+            "title": "## ⚓ Onboarding",
+            "labels": [
+                "onboarding",
+                "onboarding-ops"
             ]
         },
         {
@@ -81,7 +108,7 @@
     "tag_resolver": {
       "method": "sort",
       "filter": {
-        "pattern": "v-20(.+)",
+        "pattern": "v-(.+)",
         "flags": "gu"
       }
     },

@@ -1,4 +1,8 @@
+import config from "../config";
+
 import OrgSettingsBaseResource from "./OrgSettingsBaseResource";
+
+const { RS_API_URL } = config;
 
 // fyi the API defines these as CamelCased but the DB seems to have them UPPERCASED
 // so, we can't really have an enumerator.
@@ -20,24 +24,27 @@ export default class OrgSettingsResource extends OrgSettingsBaseResource {
         return "OrgSettingsResource";
     }
 
-    static listUrl(params: {}): string {
-        return `${process.env.REACT_APP_BACKEND_URL}/api/settings/organizations`;
+    static listUrl(_params: {}): string {
+        return `${RS_API_URL}/api/settings/organizations`;
     }
 
     static url(params: { orgname: string }): string {
-        return `${process.env.REACT_APP_BACKEND_URL}/api/settings/organizations/${params.orgname}`;
+        return `${RS_API_URL}/api/settings/organizations/${params.orgname}`;
     }
 
+    /**
+     * Used by filter edit box ui to show only matched elements.
+     * Allows some data to be excluded or cleaned up
+     * @param search {string}
+     */
     filterMatch(search: string | null): boolean {
         if (!search) {
             // no search returns EVERYTHING
             return true;
         }
-        // experimenting with matching.
-        // combine all the search terms, split into words, prefix match
-        // COULD include deeper meta data to search? we'd have to flatten the array of objects
+        // combine all elements to be searched.
         const fullstr =
-            `${this.name} ${this.description} ${this.jurisdiction} ${this.stateCode} ${this.stateCode}`.toLowerCase();
+            `${this.name} ${this.description} ${this.jurisdiction} ${this.stateCode} ${this.countyName}`.toLowerCase();
         return fullstr.includes(`${search.toLowerCase()}`);
     }
 }

@@ -41,8 +41,24 @@ $ kill -${SIGNAL} $(cat "/tmp/${USER}/openvpn.pid")
 # On termination, openvpn will remove the PID file
 ```
 
+If you're not able to get connectivity to services in Azure after the VPN has started, and/or you see the message
+`Warning: /etc/resolv.conf is not a symbolic link to /run/resolvconf/resolv.conf.` you may need to give your
+systemd-based resolv.conf services a kick:
+
+```bash
+$ sudo dpkg-reconfigure resolvconf
+```
+
+This will walk you through a curses-based UI, just hit OK to everything. It'll tell you you need to reboot, and that may
+be true sometimes but it wasn't for me.
+
+More info on [this issue](https://github.com/pop-os/pop/issues/773).
+
+
 ## Windows
+
 ### VPN DNS Resolution
+
 There is an issue where the DNS server for the VPN adapter is not used when resolving hostnames.  This is due to the interface metric of the VPN loosing to the metric of your normal network adapter.  Run the following command to look up the IP of a server in the Azure environment and test if this is an issue .  For example:
 
 ```
@@ -54,6 +70,7 @@ nslookup pdhstaging-pgsql.postgres.database.azure.com
 should return an IP address in the 10.0.0.0/8 range which is in the range used by the VPN.  If you see an address outside of this 10.0.0.0/8 range then continue with the instructions here to fix this issue.
 
 To fix this issue:
+
 1. Open Control Panel as an administrator
 2. Choose Network and Internet, and then choose Network Connections.
 3. Right-click the TAP-Windows Adapter V9 tap adapter.
@@ -71,7 +88,7 @@ Configuration for interface "OpenVPN TAP-Windows6"
     IP Address:                           192.168.10.5
     Subnet Prefix:                        192.168.10.0/24 (mask 255.255.255.0)
     InterfaceMetric:                      1
-    DNS servers configured through DHCP:  10.0.2.5
+    DNS servers configured through DHCP:  10.0.2.4
     Register with which suffix:           Primary only
     WINS servers configured through DHCP: None
 ```
@@ -101,43 +118,46 @@ If you are using OpenVPN Connect, uninstall it and install the [OpenVPN Client](
    * `prime-data-hub-staging.ovpn`
    * `prime-data-hub-test.ovpn`
    * `createKey.sh`
-1. Run `createKey.sh` and follow the prompts
-1. The user's VPN profile with be outputted in a folder with their name
-1. Securely transmit the VPN profile to the recipient
+   > If **new** Virtual Network Gateway, update the appropriate `.ovpn` file above with new `remote`, `verify-x509-name`, and `<tls-auth>` values.
+2. Run `createKey.sh` and follow the prompts
+3. The user's VPN profile with be outputted in a folder with their name
+4. Securely transmit the VPN profile to the recipient
 
 ## Generate a VPN Profile (Manual)
 
 To generate keys for a VPN profile, follow the below steps. These steps [are derived from this Azure document](https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-certificates-point-to-site-linux).
 
 * Obtain the root VPN keys `caKey.pem` and `caCert.pem`
+  * If you need new root VPN keys, run the following to generate a new public root cert base64 to add to the Virtual Network Gateway:
+    ```bash
+    ipsec pki --gen --outform pem > caKey.pem
+    ipsec pki --self --in caKey.pem --dn "CN=VPN CA" --ca --outform pem > caCert.pem
+
+    openssl x509 -in caCert.pem -outform der | base64 -w0 ; echo
+    ```
+  * If replacing an existing public root cert base64, it may not apply unless you first delete the pre-existing instead of overwriting.
+  * [Resource](https://docs.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-certificates-point-to-site-linux#cli)
 * Generate a user certificate:
 
-```
-export VPN_USERNAME="client"
+    ```bash
+    export VPN_USERNAME="client"
 
-ipsec pki --gen --outform pem > "${VPN_USERNAME}Key.pem"
-ipsec pki --pub --in "${VPN_USERNAME}Key.pem" | ipsec pki --issue --cacert caCert.pem --cakey caKey.pem --dn "CN=${VPN_USERNAME}" --san "${VPN_USERNAME}" --flag clientAuth --outform pem > "${VPN_USERNAME}Cert.pem"
-```
+    ipsec pki --gen --outform pem > "${VPN_USERNAME}Key.pem"
+    ipsec pki --pub --in "${VPN_USERNAME}Key.pem" | ipsec pki --issue --cacert caCert.pem --cakey caKey.pem --dn "CN=${VPN_USERNAME}" --san "${VPN_USERNAME}" --flag clientAuth --outform pem > "${VPN_USERNAME}Cert.pem"
+    ```
 
 * Generate a p12 bundle from the user certificate:
-
-```
-openssl pkcs12 -in "${VPN_USERNAME}Cert.pem" -inkey "${VPN_USERNAME}Key.pem" -certfile caCert.pem -export -out "${VPN_USERNAME}.p12"
-```
+    ```bash
+    openssl pkcs12 -in "${VPN_USERNAME}Cert.pem" -inkey "${VPN_USERNAME}Key.pem" -certfile caCert.pem -export -out "${VPN_USERNAME}.p12"
+    ```
 
 * In the VPN profile, add the contents of the following files to the specified sections:
     * `${VPN_USERNAME}Cert.pem` to `<cert></cert>`
     * `${VPN_USERNAME}Key.pem` to `<key></key>`
 * Securely transmit the VPN profile to the recipient
 
+**Note:** GitHub environment VPN credentials are [stored as base64](https://github.com/golfzaptw/action-connect-ovpn#how-to-prepare-file-ovpn).
+
 ## Revoke a VPN Profile
 
-If a VPN profile needs to be revoked for any reason this can be done via Azure.
-
-* Generate a thumbprint of the VPN profile's user certificate:
-
-```
-openssl x509 -in ${USEERNAME}Cert.pem -fingerprint -noout
-```
-
-* Add the thumbprint to `root_revoked_certificate` block of the Terraform [`virtual_network_gateway` resource](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_network_gateway)
+ * [Instructions](../../operations/vpn/README.md)

@@ -1,6 +1,7 @@
 ---
 name: hl7-ingest-covid-19
 topic: covid-19
+trackingElement: message_id
 description: Schema for ingesting HL7 messages
 extends: covid-19
 elements:
@@ -35,6 +36,9 @@ elements:
     hl7Field: PID-3-4
     hl7OutputFields: [ PID-3-6-2 ]
 
+  - name: patient_ethnicity
+    valueSet: sender-automation/ethnicity
+
   - name: message_profile_id
     hl7Field: MSH-21
     default: ""
@@ -62,3 +66,32 @@ elements:
   # County can be ORC-22-8, but preferred is county code in ORC-22-9
   - name: ordering_facility_county
     hl7Field: ORC-22-8
+
+  - name: patient_state_zip_lookup
+    type: TABLE
+    pii: false
+    table: zip-code-data
+    tableColumn: state_abbr
+    mapper: zipCodeToState(patient_zip_code)
+
+  - name: patient_state
+    mapper: use(patient_state, patient_state_zip_lookup)
+    cardinality: ZERO_OR_ONE
+    natFlatFileField: Patient_state
+    hhsGuidanceField:
+    hl7Field: PID-11-4
+
+  - name: ordering_facility_state_zip_lookup
+    type: TABLE
+    pii: false
+    table: zip-code-data
+    tableColumn: state_abbr
+    mapper: zipCodeToState(ordering_facility_zip_code)
+
+  - name: ordering_facility_state
+    mapper: use(ordering_facility_state, ordering_facility_state_zip_lookup)
+    cardinality: ZERO_OR_ONE
+    natFlatFileField: Ordering_facility_state
+    hhsGuidanceField:
+    hl7Field: ORC-22-4
+    documentation: The state of the facility which the test was ordered from

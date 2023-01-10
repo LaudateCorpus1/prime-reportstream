@@ -36,7 +36,7 @@ import gov.cdc.prime.router.metadata.LIVDLookupMapper
  */
 data class Schema(
     val name: String,
-    val topic: String,
+    val topic: Topic,
     val elements: List<Element> = emptyList(),
     val trackingElement: String? = null, // the element to use for tracking this test
     val description: String? = null,
@@ -49,7 +49,7 @@ data class Schema(
     constructor(
         vararg varElements: Element,
         name: String,
-        topic: String,
+        topic: Topic,
         trackingElement: String? = null, // the element to use for tracking this test
         description: String? = null,
         referenceUrl: String? = null,
@@ -137,7 +137,7 @@ data class Schema(
         // Try to order any last mappers by the order the LIVD lookup mapper looks at elements
         val livdElementNames = LIVDLookupMapper().valueNames(Element("dummy"), emptyList())
         livdElementNames.forEach { livdElementName ->
-            unorderedElements.firstOrNull() { it.name == livdElementName }?.also {
+            unorderedElements.firstOrNull { it.name == livdElementName }?.also {
                 orderedElements.add(it)
                 unorderedElements.remove(it)
             }

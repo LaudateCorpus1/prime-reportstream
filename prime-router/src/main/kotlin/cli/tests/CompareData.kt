@@ -6,7 +6,8 @@ import ca.uhn.hl7v2.model.Type
 import ca.uhn.hl7v2.parser.CanonicalModelClassFactory
 import ca.uhn.hl7v2.util.Hl7InputStreamMessageIterator
 import ca.uhn.hl7v2.util.Terser
-import com.github.ajalt.clikt.output.TermUi
+import com.github.difflib.text.DiffRow
+import com.github.difflib.text.DiffRowGenerator
 import com.github.doyaaaaaken.kotlincsv.dsl.csvReader
 import gov.cdc.prime.router.Element
 import gov.cdc.prime.router.Receiver
@@ -15,12 +16,13 @@ import gov.cdc.prime.router.ReportId
 import gov.cdc.prime.router.Schema
 import gov.cdc.prime.router.azure.HttpUtilities
 import gov.cdc.prime.router.azure.WorkflowEngine
+import gov.cdc.prime.router.common.DateUtilities
+import gov.cdc.prime.router.common.DateUtilities.toOffsetDateTime
 import gov.cdc.prime.router.common.Environment
+import gov.cdc.prime.router.fhirengine.utils.CompareFhirData
 import java.io.File
 import java.io.InputStream
 import java.net.HttpURLConnection
-import java.time.OffsetDateTime
-import java.time.format.DateTimeParseException
 
 /**
  * Uses test data provided via a configuration file, sends the data to the API, then checks the response,
@@ -137,6 +139,7 @@ class DataCompareTest : CoolTest() {
                     // Send the input file to ReportStream
                     val (responseCode, json) =
                         HttpUtilities.postReportBytes(environment, inputFile.readBytes(), sender, options.key)
+                    inputFile.close()
                     if (responseCode != HttpURLConnection.HTTP_CREATED) {
                         bad("***$name Test FAILED***:  response code $responseCode")
                         passed = false
@@ -145,7 +148,7 @@ class DataCompareTest : CoolTest() {
                     }
 
                     // Check the response from the endpoint
-                    TermUi.echo(json)
+                    echo(json)
                     passed = passed and examinePostResponse(json, !options.asyncProcessMode)
 
                     // Compare the data
@@ -259,10 +262,10 @@ class DataCompareTest : CoolTest() {
                 val expectedOutputStream = this::class.java.getResourceAsStream(expectedOutputPath)
                 val schema = metadata.findSchema(output.receiver!!.schemaName)
                 if (outputFile.canRead() && expectedOutputStream != null && schema != null) {
-                    TermUi.echo("----------------------------------------------------------")
-                    TermUi.echo("Comparing expected data from $expectedOutputPath")
-                    TermUi.echo("with actual data from $sftpDir/$outputFilename")
-                    TermUi.echo("using schema ${schema.name}...")
+                    echo("----------------------------------------------------------")
+                    echo("Comparing expected data from $expectedOutputPath")
+                    echo("with actual data from $sftpDir/$outputFilename")
+                    echo("using schema ${schema.name}...")
                     val result = CompareData().compare(
                         expectedOutputStream, outputFile.inputStream(),
                         output.receiver!!.format, schema
@@ -273,8 +276,8 @@ class DataCompareTest : CoolTest() {
                         bad("***$name Test FAILED***: Data comparison FAILED")
                     }
                     if (result.errors.size > 0) bad(result.errors.joinToString("\n", "ERROR: "))
-                    if (result.warnings.size > 0) TermUi.echo(result.warnings.joinToString("\n", "WARNING: "))
-                    TermUi.echo("")
+                    if (result.warnings.size > 0) echo(result.warnings.joinToString("\n", "WARNING: "))
+                    echo("")
                     passed = passed and result.passed
                 }
             } else {
@@ -321,7 +324,7 @@ warnings: ${warnings.joinToString()}
     fun compare(
         expected: File,
         actual: File,
-        format: Report.Format,
+        format: Report.Format?,
         schema: Schema
     ): Result {
         val result = Result()
@@ -345,33 +348,45 @@ warnings: ${warnings.joinToString()}
 
     /**
      * Compares two input streams, an [actual] and [expected], of the same [schema] and [format].
+     * @param fieldsToIgnore is a list of fields that should be ignored when doing a comparison of field values.
      * @return the result for the comparison, with result.passed true if the comparison was successful
      */
     fun compare(
         expected: InputStream,
         actual: InputStream,
-        format: Report.Format,
-        schema: Schema,
-        result: Result = Result()
+        format: Report.Format?,
+        schema: Schema?,
+        result: Result = Result(),
+        fieldsToIgnore: List<String>? = null
     ): Result {
-        if (format == Report.Format.HL7 || format == Report.Format.HL7_BATCH) {
-            result.merge(CompareHl7Data().compare(expected, actual))
-        } else {
-            result.merge(CompareCsvData().compare(expected, actual, schema))
+        check((format == Report.Format.CSV && schema != null) || format != Report.Format.CSV) { "Schema is required" }
+        val compareResult = when (format) {
+            Report.Format.CSV, Report.Format.CSV_SINGLE, Report.Format.INTERNAL ->
+                CompareCsvData().compare(expected, actual, schema!!, fieldsToIgnore)
+            Report.Format.HL7, Report.Format.HL7_BATCH -> CompareHl7Data().compare(expected, actual)
+            Report.Format.FHIR -> CompareFhirData().compare(expected, actual)
+            else -> CompareFile().compare(expected, actual)
         }
+        result.merge(compareResult)
         return result
     }
 }
 
 /**
  * Compares two HL7 files.
+ * @property result object to contain the result of the comparison
  */
-class CompareHl7Data(val result: CompareData.Result = CompareData.Result()) {
-    /**
-     * The list of fields that contain dynamic values that cannot be compared.  Source:
-     * Hl7Serializer.setLiterals()
-     */
-    internal val dynamicHl7Values = arrayOf("MSH-7", "SFT-2", "SFT-4", "SFT-6")
+class CompareHl7Data(
+    val result: CompareData.Result = CompareData.Result(),
+    private val ignoredFields: List<String> = covidDynamicHl7Fields
+) {
+    companion object {
+        /**
+         * The list of fields that contain dynamic values that cannot be compared.  Source:
+         * Hl7Serializer.setLiterals()
+         */
+        private val covidDynamicHl7Fields = listOf("MSH-7", "SFT-2", "SFT-4", "SFT-6")
+    }
 
     /**
      * Compare the data in the [actual] report to the data in the [expected] report.  This
@@ -494,7 +509,7 @@ class CompareHl7Data(val result: CompareData.Result = CompareData.Result()) {
             // Loop through all the components in a field and compare their values.
             for (repetitionIndex in 0 until maxNumRepetitions) {
                 // If this is not a dynamic value then check it against the expected values
-                if (!dynamicHl7Values.contains(fieldSpec)) {
+                if (!ignoredFields.contains(fieldSpec)) {
                     val expectedFieldValue = if (repetitionIndex < expectedFieldContents.size)
                         expectedFieldContents[repetitionIndex].toString().trim() else ""
                     val actualFieldValue = if (repetitionIndex < actualFieldContents.size)
@@ -506,7 +521,7 @@ class CompareHl7Data(val result: CompareData.Result = CompareData.Result()) {
                     )
                 }
                 // For dynamic values we expect them to be have something
-                else if (actualFieldContents[repetitionIndex].isEmpty) {
+                else if ((actualFieldContents.getOrNull(repetitionIndex)?.isEmpty ?: false)) {
                     result.errors.add(
                         "No date/time of message for record $recordNum in field $fieldSpec"
                     )
@@ -587,7 +602,7 @@ class CompareCsvData {
      * Errors are generated when:
      *  1. The number of reports is different (number of rows)
      *  2. A column in the expected values does not exist in the actual values
-     *  3. A expected value does not match the actual value
+     *  3. An expected value does not match the actual value
      *  4. Cannot find the actual row in the expected records
      *
      * Warnings are generated when:
@@ -600,6 +615,7 @@ class CompareCsvData {
         expected: InputStream,
         actual: InputStream,
         schema: Schema,
+        fieldsToIgnore: List<String>? = null,
         result: CompareData.Result = CompareData.Result()
     ): CompareData.Result {
         val expectedRows = csvReader().readAll(expected)
@@ -645,7 +661,17 @@ class CompareCsvData {
                             )
                 }
                 if (matchingExpectedRow.size == 1) {
-                    if (!compareCsvRow(actualRow, matchingExpectedRow[0], expectedRows[0], schema, rowIndex, result)) {
+                    if (
+                        !compareCsvRow(
+                            actualRow,
+                            matchingExpectedRow[0],
+                            expectedRows[0],
+                            schema,
+                            rowIndex,
+                            fieldsToIgnore,
+                            result
+                        )
+                    ) {
                         result.errors.add("Comparison for row #$rowIndex FAILED")
                     }
                 } else {
@@ -673,7 +699,7 @@ class CompareCsvData {
      * Errors are generated when:
      *  1. The number of columns in the actual data is less than in the expected data
      *  2. A column in the expected values does not exist in the actual values
-     *  3. A expected value does not match the actual value
+     *  3. An expected value does not match the actual value
      *
      * Warnings are generated when:
      *  1. The number of columns in the actual data is more than in the expected data
@@ -687,6 +713,7 @@ class CompareCsvData {
         expectedHeaders: List<String>,
         schema: Schema,
         actualRowNum: Int,
+        fieldsToIgnore: List<String>?,
         result: CompareData.Result
     ): Boolean {
         var passed = true
@@ -714,6 +741,12 @@ class CompareCsvData {
                 val actualValue = actualRow[j].trim()
                 val colName = schema.elements[j].name
 
+                // check to see if we should skip a specific field. some fields may contain some dynamic data
+                // that we don't want to check, like a date field for example, so we can pass that through
+                // as an option to skip
+                if (fieldsToIgnore?.contains(colName) == true)
+                    continue
+
                 val expectedColIndex = getCsvColumnIndex(schema.elements[j], expectedHeaders)
                 val expectedValue = if (expectedColIndex >= 0)
                     expectedRow[expectedColIndex].trim()
@@ -721,17 +754,17 @@ class CompareCsvData {
 
                 // If there is an expected value then compare it.
                 if (expectedValue.isNotBlank()) {
-
                     // For date/time values, the string has timezone offsets that can differ per environment, so
                     // compare the numeric value instead of just the string
                     if (schema.elements[j].type != null &&
-                        schema.elements[j].type == Element.Type.DATETIME && actualValue.isNotBlank()
+                        schema.elements[j].type == Element.Type.DATETIME &&
+                        actualValue.isNotBlank()
                     ) {
                         try {
                             val expectedTime =
-                                OffsetDateTime.parse(expectedValue, Element.datetimeFormatter).toEpochSecond()
+                                DateUtilities.parseDate(expectedValue).toOffsetDateTime().toEpochSecond()
                             val actualTime =
-                                OffsetDateTime.parse(actualValue, Element.datetimeFormatter).toEpochSecond()
+                                DateUtilities.parseDate(actualValue).toOffsetDateTime().toEpochSecond()
                             if (expectedTime != actualTime) {
                                 result.errors.add(
                                     "Date time value does not match in report $actualRowNum " +
@@ -740,7 +773,7 @@ class CompareCsvData {
                                 )
                                 passed = false
                             }
-                        } catch (e: DateTimeParseException) {
+                        } catch (e: Throwable) {
                             // This is not a true date/time since it was not parse, probably a date.  Compare as strings.
                             if (actualValue != expectedValue) {
                                 result.errors.add(
@@ -796,5 +829,47 @@ class CompareCsvData {
         return if (expectedColIndexByCsvIndex != null && expectedColIndexByCsvIndex >= 0)
             expectedColIndexByCsvIndex
         else expectedColIndexByElementIndex
+    }
+}
+
+/**
+ * Compare the raw contents of a file.
+ * @property result the result of the comparison
+ */
+class CompareFile(
+    val result: CompareData.Result = CompareData.Result()
+) {
+    /**
+     * Compare the contents of a file [actual] vs [expected] and provide the [result].
+     */
+    fun compare(
+        expected: InputStream,
+        actual: InputStream,
+        result: CompareData.Result = CompareData.Result()
+    ): CompareData.Result {
+        // Read the data
+        val expectedData = expected.bufferedReader().readLines()
+        val actualData = actual.bufferedReader().readLines()
+
+        // Generate the diff
+        val generator = DiffRowGenerator.create()
+            .showInlineDiffs(true)
+            .mergeOriginalRevised(true)
+            .inlineDiffByWord(true)
+            .ignoreWhiteSpaces(true)
+            .oldTag { start: Boolean? ->
+                if (true == start) "\u001B[9;101m" else "\u001B[0m" // Use strikethrough and red for deleted changes
+            }
+            .newTag { start: Boolean? ->
+                if (true == start) "\u001B[1;42m" else "\u001B[0m" // Use bold and green for additions
+            }
+            .build()
+        val diff = generator.generateDiffRows(expectedData, actualData)
+        val hasChanges = diff.any { it.tag != DiffRow.Tag.EQUAL }
+
+        // Populate the result.
+        result.passed = !hasChanges
+        diff.filter { it.tag != DiffRow.Tag.EQUAL }.forEach { result.errors.add(it.oldLine) }
+        return result
     }
 }

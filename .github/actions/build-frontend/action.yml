@@ -1,6 +1,6 @@
 # action.yml
-name: 'Build Frontend'
-description: 'Build react website'
+name: "Build Frontend"
+description: "Build react website"
 inputs:
   env-name:
     required: true
@@ -13,15 +13,22 @@ inputs:
   version:
     description: "Version tag"
     required: true
+  GITHUB_TOKEN:
+    description: Github provided token
+    required: false
+    default: ""
+  SONAR_TOKEN:
+    description: Token to communicate with Sonarcloud
+    required: false
+    default: ""
 
 runs:
   using: "composite"
   steps:
-
     - name: Use Node.js ${{ matrix.node-version }} with yarn
-      uses: actions/setup-node@v2
+      uses: actions/setup-node@8c91899e586c5b171469028077307d293428b516
       with:
-        node-version: '14'
+        node-version: "16.18.1"
 
     - run: yarn install
       working-directory: frontend-react
@@ -33,37 +40,45 @@ runs:
       run: |
         echo "" >> .env.production
         echo "REACT_APP_APPINSIGHTS_KEY=${{ inputs.appinsights-prod-key }}" >> .env.production
+        yarn test:ci
         yarn build:production
       shell: bash
 
-    - name: Build release for staging branch (conditional check)
-      if: inputs.env-name == 'staging'
+    - name: Build release for non-production branch (conditional check)
+      if: inputs.env-name != 'prod'
       working-directory: frontend-react
       run: |
-        echo "" >> .env.staging
-        echo "REACT_APP_APPINSIGHTS_KEY=${{ inputs.appinsights-staging-key }}" >> .env.staging
-        yarn build:staging
+        ENV=${{ inputs.env-name }}
+        if [[ $ENV != demo* && $ENV != "test" ]]; then ENV="staging"; fi
+        echo "" >> .env.$ENV
+        echo "REACT_APP_APPINSIGHTS_KEY=${{ inputs.appinsights-staging-key }}" >> .env.$ENV
+        yarn lint
+        yarn test:ci
+        yarn build:$ENV
       shell: bash
 
-    - name: Build release for non-production branch (conditional check)
-      if: (!(inputs.env-name == 'staging' || inputs.env-name == 'prod'))
-      working-directory: frontend-react
-      run: |
-        echo "" >> .env.staging
-        echo "REACT_APP_APPINSIGHTS_KEY=${{ inputs.appinsights-staging-key }}" >> .env.staging
-        yarn lint:prettier
-        yarn lint:eslint
-        yarn test:ci
-        yarn build:staging
-      shell: bash
+    - name: SonarCloud Scan
+      if: inputs.GITHUB_TOKEN != '' && inputs.SONAR_TOKEN != ''
+      uses: sonarsource/sonarcloud-github-action@cb201f3b2d7a38231a8c042dfea4539c8bea180b
+      env:
+        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ inputs.SONAR_TOKEN }}
+      with:
+        args: >
+          -Dsonar.cpd.exclusions=frontend-react/**/*.test.*
+          -Dsonar.javascript.lcov.reportPaths=frontend-react/coverage/lcov.info
+          -Dsonar.coverage.exclusions=frontend-react/**/__mocks__/**,frontend-react/**/mocks/**,frontend-react/**/*.test.*
+          -Dsonar.sources=frontend-react/src
+          -Dsonar.projectKey=CDCgov_prime-data-hub
+          -Dsonar.organization=cdcgov
 
     - name: Tar frontend files
       shell: bash
       working-directory: frontend-react
-      run: tar -czvf static-website-react.tar.gz build
+      run: tar -czf static-website-react.tar.gz build
 
     - name: Upload frontend artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@83fd05a356d7e2593de66fc9913b3002723633cb
       with:
         name: static-website-react-${{ inputs.version }}
         path: frontend-react/static-website-react.tar.gz

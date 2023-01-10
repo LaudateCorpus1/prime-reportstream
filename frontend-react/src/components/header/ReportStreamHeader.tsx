@@ -8,37 +8,68 @@ import {
 } from "@trussworks/react-uswds";
 import { NavLink } from "react-router-dom";
 import { NetworkErrorBoundary } from "rest-hooks";
-import { library } from "@fortawesome/fontawesome-svg-core";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faRightLeft } from "@fortawesome/free-solid-svg-icons";
 
-import { permissionCheck } from "../../webreceiver-utils";
-import { PERMISSIONS } from "../../resources/PermissionsResource";
-import { getStoredOrg } from "../GlobalContextProvider";
+import { permissionCheck, PERMISSIONS } from "../../utils/PermissionsUtils";
+import { ReactComponent as RightLeftArrows } from "../../content/right-left-arrows.svg";
+import { useSessionContext } from "../../contexts/SessionContext";
+import { MemberType } from "../../hooks/UseOktaMemberships";
+import config from "../../config";
 
 import { SignInOrUser } from "./SignInOrUser";
-import { HowItWorksDropdown } from "./HowItWorksDropdown";
-import { AdminDropdownNav } from "./AdminDropdownNav";
-import { GettingStartedDropdown } from "./GettingStartedDropdown";
+import { AdminDropdown } from "./DropdownNav";
 
-library.add(faRightLeft);
+const { IS_PREVIEW, CLIENT_ENV } = config;
+
+const ProductIA = () => (
+    <NavLink
+        to="/product"
+        key="product"
+        data-attribute="hidden"
+        hidden={true}
+        className="usa-nav__link"
+    >
+        <span>Product</span>
+    </NavLink>
+);
+
+const ResourcesIA = () => (
+    <NavLink
+        to="/resources"
+        key="resources"
+        data-attribute="hidden"
+        hidden={true}
+        className="usa-nav__link"
+    >
+        <span>Resources</span>
+    </NavLink>
+);
+
+const SupportIA = () => (
+    <NavLink
+        to="/support"
+        key="support"
+        data-attribute="hidden"
+        hidden={true}
+        className="usa-nav__link"
+    >
+        <span>Support</span>
+    </NavLink>
+);
 
 export const ReportStreamHeader = () => {
     const { authState } = useOktaAuth();
+    const { activeMembership, isAdminStrictCheck } = useSessionContext();
     const [expanded, setExpanded] = useState(false);
-    const organization = getStoredOrg();
+    let itemsMenu = [<ProductIA />, <ResourcesIA />, <SupportIA />];
+
     const toggleMobileNav = (): void =>
         setExpanded((prvExpanded) => !prvExpanded);
-    let itemsMenu = [<GettingStartedDropdown />, <HowItWorksDropdown />];
-    const isOktaPreview =
-        `${process.env.REACT_APP_OKTA_URL}`.match(/oktapreview.com/) !== null;
-    const environment = `${process.env.REACT_APP_CLIENT_ENV}`;
 
-    if (authState !== null && authState.isAuthenticated) {
+    if (authState && authState.isAuthenticated && authState.accessToken) {
         /* RECEIVERS ONLY */
         if (
-            permissionCheck(PERMISSIONS.RECEIVER, authState) ||
-            permissionCheck(PERMISSIONS.PRIME_ADMIN, authState)
+            activeMembership?.memberType === MemberType.RECEIVER ||
+            activeMembership?.memberType === MemberType.PRIME_ADMIN
         ) {
             itemsMenu.push(
                 <NavLink
@@ -55,8 +86,8 @@ export const ReportStreamHeader = () => {
 
         /* SENDERS ONLY */
         if (
-            permissionCheck(PERMISSIONS.SENDER, authState) ||
-            permissionCheck(PERMISSIONS.PRIME_ADMIN, authState)
+            activeMembership?.memberType === MemberType.SENDER ||
+            activeMembership?.memberType === MemberType.PRIME_ADMIN
         ) {
             itemsMenu.push(
                 <NavLink
@@ -80,9 +111,11 @@ export const ReportStreamHeader = () => {
             );
         }
 
-        /* ADMIN ONLY */
-        if (permissionCheck(PERMISSIONS.PRIME_ADMIN, authState)) {
-            itemsMenu.push(<AdminDropdownNav />);
+        /* ADMIN ONLY (hard check)
+          Build a drop-down for file handler links
+        */
+        if (isAdminStrictCheck) {
+            itemsMenu.push(<AdminDropdown />);
         }
     }
 
@@ -98,7 +131,7 @@ export const ReportStreamHeader = () => {
                                 </NavLink>
                             </em>
                             <span className="rs-oktapreview-watermark">
-                                {isOktaPreview ? environment : ""}
+                                {IS_PREVIEW ? CLIENT_ENV : ""}
                             </span>
                         </Title>
                     </div>
@@ -109,7 +142,14 @@ export const ReportStreamHeader = () => {
                     onToggleMobileNav={toggleMobileNav}
                     mobileExpanded={expanded}
                 >
-                    {permissionCheck(PERMISSIONS.PRIME_ADMIN, authState) ? (
+                    {/* PERMISSIONS REFACTOR
+                     This needs to be directly checking the token for admin permissions because
+                     an admin with an active membership that is NOT an admin membership type still
+                     needs to be able to see and use this */}
+                    {permissionCheck(
+                        PERMISSIONS.PRIME_ADMIN,
+                        authState?.accessToken
+                    ) ? (
                         <NetworkErrorBoundary
                             fallbackComponent={() => (
                                 <select>
@@ -122,11 +162,13 @@ export const ReportStreamHeader = () => {
                                 className="usa-button usa-button--outline usa-button--small padding-1"
                             >
                                 <span className="usa-breadcrumb padding-left-2 text-semibold text-no-wrap">
-                                    {organization}
-                                    <FontAwesomeIcon
-                                        className="padding-x-1 padding-top-0 text-primary-vivid"
-                                        icon="right-left"
-                                        size="sm"
+                                    {activeMembership?.parsedName || ""}
+                                    <RightLeftArrows
+                                        aria-hidden="true"
+                                        role="img"
+                                        className="rs-fa-right-left-icon padding-x-1 padding-top-1 text-primary-vivid"
+                                        width={"3em"}
+                                        height={"2em"}
                                     />
                                 </span>
                             </NavLink>

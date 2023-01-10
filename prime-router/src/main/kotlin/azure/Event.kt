@@ -23,7 +23,9 @@ abstract class Event(val eventAction: EventAction, val at: OffsetDateTime?) {
         PROCESS_WARNING, // when an attempt at a process action fails, but will be retried
         PROCESS_ERROR, // when an attempt at a process action fails permanently
         RECEIVE,
-        TRANSLATE, // Deprecated
+        CONVERT, // for universal pipeline converting to FHIR
+        ROUTE, // calculate routing for a submission
+        TRANSLATE,
         BATCH,
         SEND,
         WIPE, // Deprecated
@@ -40,6 +42,8 @@ abstract class Event(val eventAction: EventAction, val at: OffsetDateTime?) {
                 PROCESS_WARNING -> TaskAction.process_warning
                 PROCESS_ERROR -> TaskAction.process_error
                 RECEIVE -> TaskAction.receive
+                CONVERT -> TaskAction.convert
+                ROUTE -> TaskAction.route
                 TRANSLATE -> TaskAction.translate
                 BATCH -> TaskAction.batch
                 SEND -> TaskAction.send
@@ -107,7 +111,7 @@ abstract class Event(val eventAction: EventAction, val at: OffsetDateTime?) {
                     //  or a blank string
                     val after = if (parts[6].isNotEmpty()) OffsetDateTime.parse(parts[6]) else null
                     val reportId = UUID.fromString(parts[2])
-                    val options = Options.valueOf(parts[3])
+                    val options = Options.valueOfOrNone(parts[3])
 
                     // convert incoming serialized routeTo string into List<String>
                     val routeTo = if (parts[5].isNotEmpty())
@@ -161,7 +165,7 @@ abstract class Event(val eventAction: EventAction, val at: OffsetDateTime?) {
 }
 
 /**
- * An event that goes on and is read off of the 'process' queue.
+ * An event that goes on and is read off of an azure queue.
  * @param reportId The report ID to be processed
  * @param options Options passed in on the initial call
  * @param defaults Defaults passed in on the initial call

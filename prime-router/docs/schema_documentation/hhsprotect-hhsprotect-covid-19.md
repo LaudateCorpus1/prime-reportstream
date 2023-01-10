@@ -1130,7 +1130,7 @@ The zip code of the provider
 
 **Type**: NUMBER
 
-**PII**: No
+**PII**: Yes
 
 **LOINC Code**: 30525-0
 
@@ -1597,22 +1597,6 @@ P, D, or T for Production, Debugging, or Training
 
 **Name**: reportingFacility
 
-**ReportStream Internal Name**: reportingFacility
-
-**Type**: TEXT
-
-**PII**: No
-
-**Cardinality**: [0..1]
-
-**Documentation**:
-
-This field is no longer used.  Included here so it does not generate a warning if present.
-
----
-
-**Name**: reportingFacility
-
 **ReportStream Internal Name**: reporting_facility_name
 
 **Type**: TEXT
@@ -1804,6 +1788,10 @@ Code | Display | System
 122555007|Venous blood specimen|SNOMED_CT
 119297000|Blood specimen|SNOMED_CT
 122554006|Capillary blood specimen|SNOMED_CT
+258467004|Nasopharyngeal washings|SNOMED_CT
+418932006|Oral swab specimen|SNOMED_CT
+433801000124107|Nasopharyngeal and oropharyngeal swab|SNOMED_CT
+309171007|Lower respiratory fluid sample|SNOMED_CT
 
 **Documentation**:
 
@@ -2451,11 +2439,6 @@ Is the test authorized for unproctored administration by the FDA (Y, N, UNK)
 
 **Default Value**: F
 
-**HL7 Fields**
-
-- [OBR-25-1](https://hl7-definition.caristix.com/v2/HL7v2.5.1/Fields/OBR.25.1)
-- [OBX-11-1](https://hl7-definition.caristix.com/v2/HL7v2.5.1/Fields/OBX.11.1)
-
 **Cardinality**: [0..1]
 
 **Value Sets**
@@ -2496,5 +2479,21 @@ the test result is in some intermediate status, is a correction, or is the final
 **Documentation**:
 
 eg, "DETECTED".  Custom.  ReportStream uses testResult code, not this text value.
+
+---
+
+**Name**: test_type
+
+**ReportStream Internal Name**: test_type
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: TestType
 
 ---

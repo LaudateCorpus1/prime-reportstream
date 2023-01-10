@@ -1,13 +1,9 @@
 package gov.cdc.prime.router.cli
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.exc.MismatchedInputException
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
-import com.fasterxml.jackson.module.kotlin.jacksonMapperBuilder
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.PrintMessage
-import com.github.ajalt.clikt.output.TermUi
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
@@ -35,6 +31,7 @@ import gov.cdc.prime.router.azure.HttpUtilities
 import gov.cdc.prime.router.azure.LookupTableFunctions
 import gov.cdc.prime.router.azure.db.tables.pojos.LookupTableVersion
 import gov.cdc.prime.router.common.Environment
+import gov.cdc.prime.router.common.JacksonMapperUtilities
 import org.apache.commons.io.FileUtils
 import org.apache.http.HttpStatus
 import org.jooq.JSONB
@@ -45,18 +42,20 @@ import java.time.Instant
 
 /**
  * Utilities to submit and get data from the Lookup Tables API.
+ * If a [useThisToken] is not specified, then attempt to get a token from Otka.
+ * Otherwise, [useThisToken] is sent as the bearer token to the ReportStream server.
  */
-class LookupTableEndpointUtilities(val environment: Environment) {
+class LookupTableEndpointUtilities(val environment: Environment, val useThisToken: String? = null) {
     /**
      * Increase from the default read timeout in case of a super-duper long table.
      */
     private val requestTimeoutMillis = 130000
 
     /**
-     * The Okta Access Token.
+     * The Access Token.
      */
-    private val oktaAccessToken = OktaCommand.fetchAccessToken(environment.oktaApp)
-        ?: throw PrintMessage("Invalid access token. Run ./prime login to fetch/refresh your access token.", true)
+    private val accessToken = useThisToken ?: OktaCommand.fetchAccessToken(environment.oktaApp)
+        ?: throw PrintMessage("Missing access token. Run ./prime login to fetch/refresh your access token.", true)
 
     /**
      * Fetches the list of tables from the API.
@@ -68,7 +67,7 @@ class LookupTableEndpointUtilities(val environment: Environment) {
         val (_, response, result) = Fuel
             .get(apiUrl.toString(), listOf(LookupTableFunctions.showInactiveParamName to listInactive.toString()))
             .authentication()
-            .bearer(oktaAccessToken)
+            .bearer(accessToken)
             .timeoutRead(requestTimeoutMillis)
             .responseJson()
         checkCommonErrorsFromResponse(result, response)
@@ -91,7 +90,7 @@ class LookupTableEndpointUtilities(val environment: Environment) {
         val (_, response, result) = Fuel
             .put(apiUrl.toString())
             .authentication()
-            .bearer(oktaAccessToken)
+            .bearer(accessToken)
             .timeoutRead(requestTimeoutMillis)
             .responseJson()
         return getTableInfoFromResponse(result, response)
@@ -108,7 +107,7 @@ class LookupTableEndpointUtilities(val environment: Environment) {
         val (_, response, result) = Fuel
             .get(apiUrl.toString())
             .authentication()
-            .bearer(oktaAccessToken)
+            .bearer(accessToken)
             .timeoutRead(requestTimeoutMillis)
             .responseJson()
         checkCommonErrorsFromResponse(result, response)
@@ -130,7 +129,7 @@ class LookupTableEndpointUtilities(val environment: Environment) {
         val (_, response, result) = Fuel
             .get(apiUrl.toString())
             .authentication()
-            .bearer(oktaAccessToken)
+            .bearer(accessToken)
             .timeoutRead(requestTimeoutMillis)
             .responseJson()
         return getTableInfoFromResponse(result, response)
@@ -152,7 +151,7 @@ class LookupTableEndpointUtilities(val environment: Environment) {
             .header(Headers.CONTENT_TYPE to HttpUtilities.jsonMediaType)
             .jsonBody(jsonPayload.toString())
             .authentication()
-            .bearer(oktaAccessToken)
+            .bearer(accessToken)
             .timeoutRead(requestTimeoutMillis)
             .responseJson()
         return getTableInfoFromResponse(result, response)
@@ -167,7 +166,7 @@ class LookupTableEndpointUtilities(val environment: Environment) {
         /**
          * Mapper to convert objects to JSON.
          */
-        private val mapper: ObjectMapper = jacksonMapperBuilder().addModule(JavaTimeModule()).build()
+        private val mapper = JacksonMapperUtilities.defaultMapper
 
         /**
          * Exception thrown with a [message] if a table is not found.
@@ -487,21 +486,21 @@ class LookupTableGetCommand : GenericLookupTableCommand(
         if (tableList.isNotEmpty()) {
             // Output to a file if requested, otherwise output to the screen.
             if (outputFile == null) {
-                TermUi.echo("")
-                TermUi.echo("Table name: $tableName")
-                TermUi.echo("Version: $version")
+                echo("")
+                echo("Table name: $tableName")
+                echo("Version: $version")
                 val colNames = tableList[0].keys.toList()
-                TermUi.echo(LookupTableCommands.rowsToPrintableTable(tableList, colNames))
-                TermUi.echo("")
+                echo(LookupTableCommands.rowsToPrintableTable(tableList, colNames))
+                echo("")
             } else {
                 saveTable(outputFile!!, tableList)
-                TermUi.echo(
+                echo(
                     "Saved ${tableList.size} rows of table $tableName version $version " +
                         "to ${outputFile!!.absolutePath} "
                 )
             }
         } else {
-            TermUi.echo("Table $tableName version $version has no rows.")
+            echo("Table $tableName version $version has no rows.")
         }
     }
 
@@ -543,13 +542,20 @@ class LookupTableCreateCommand : GenericLookupTableCommand(
     /**
      * Activate a created table in one shot.
      */
-    private val activate by option("-a", "--activate", help = "Activate the table upon creation").flag()
+    private val activate by option("-a", "--activate", help = "Activate the table upon creation")
+        .flag(default = false)
 
     /**
      * The table name.
      */
     private val tableName by option("-n", "--name", help = "The name of the table to perform the operation on")
         .required()
+
+    /**
+     * Show the raw input table being created if set to true.
+     */
+    private val showTable by option("--show-table", help = "Always show the table to be created")
+        .flag(default = false)
 
     /**
      * Force to create table(s).
@@ -559,22 +565,38 @@ class LookupTableCreateCommand : GenericLookupTableCommand(
         help = "Force the creation of new table(s) even if it is already exist"
     ).flag()
 
+    companion object {
+        /**
+         * Maximum number of table columns allowed to be displayed by default.  If a table exceeds this then the user
+         * must use the --show-table option to show the raw table.
+         */
+        private const val SMALL_TABLE_MAX_COLS = 7
+
+        /**
+         * Maximum number of table rows allowed to be displayed by default.  If a table exceeds this then the user
+         * must use the --show-table option to show the raw table.
+         */
+        private const val SMALL_TABLE_MAX_ROWS = 50
+    }
+
     override fun run() {
         // Read the input file.
         val inputData = csvReader().readAllWithHeader(inputFile)
         // Note: csvReader returns size of data-row(s) and NOT include the header-row.
         // (i.e. If the file contains of header row, it returns size = 0)
         if (inputData.isEmpty()) {
-            TermUi.echo("ERROR: Input file ${inputFile.absolutePath} has no data.")
+            echo("ERROR: Input file ${inputFile.absolutePath} has no data.")
             return
         }
 
-        // Output the data for review.
-        if (!silent) {
-            TermUi.echo("Here is the table data to be created:")
+        // Output the data for review specified.
+        val isLargeTable = inputData.size > SMALL_TABLE_MAX_ROWS || inputData[0].keys.size > SMALL_TABLE_MAX_COLS
+        // Display the table when not silent, plus display it only if it is a small table unless told otherwise.
+        if (!silent && (showTable || !isLargeTable)) {
+            echo("Here is the table data to be created:")
             val colNames = inputData[0].keys.toList()
-            TermUi.echo(LookupTableCommands.rowsToPrintableTable(inputData, colNames))
-            TermUi.echo("")
+            echo(LookupTableCommands.rowsToPrintableTable(inputData, colNames))
+            echo("")
         }
 
         // If there is an existing active version then present a diff.
@@ -588,14 +610,14 @@ class LookupTableCreateCommand : GenericLookupTableCommand(
             val activeTable = try { tableUtil.fetchTableContent(tableName, activeVersion) } catch (e: Exception) {
                 throw PrintMessage("Error fetching active table content for table $tableName: ${e.message}", true)
             }
-            TermUi.echo("Generating a diff view of the changes.  For large tables this can take a while...")
+            echo("Generating a diff view of the changes.  For large tables this can take a while...")
             val diffOutput = LookupTableCommands.generateDiff(activeTable, inputData, false)
             if (diffOutput.isNotEmpty()) {
-                TermUi.echo("Here is the diff compared to the active version $activeVersion:")
-                diffOutput.forEach { TermUi.echo(it) }
-                TermUi.echo("")
+                echo("Here is the diff compared to the active version $activeVersion:")
+                diffOutput.forEach { echo(it) }
+                echo("")
             } else {
-                TermUi.echo(
+                echo(
                     "Error: The table you are trying to create is identical to the active version " +
                         "$activeVersion."
                 )
@@ -605,7 +627,7 @@ class LookupTableCreateCommand : GenericLookupTableCommand(
 
         // Now we are ready.  Ask if we should proceed.
         if ((
-            !silent && TermUi.confirm("Continue to create a new version of $tableName with ${inputData.size} rows?")
+            !silent && confirm("Continue to create a new version of $tableName with ${inputData.size} rows?")
                 == true
             ) || silent
         ) {
@@ -615,13 +637,13 @@ class LookupTableCreateCommand : GenericLookupTableCommand(
                 throw PrintMessage("\tError creating new table version for $tableName: ${e.message}", true)
             } catch (e: LookupTableEndpointUtilities.Companion.TableConflictException) {
                 val dupVersion = e.message?.substringAfterLast("version")
-                TermUi.echo(
+                echo(
                     "Skipping creation of duplicate table $tableName since it is duplicated with version$dupVersion."
                 )
                 return
             }
 
-            TermUi.echo(
+            echo(
                 "\t${inputData.size} rows created for lookup table $tableName version " +
                     "${newTableInfo.tableVersion}."
             )
@@ -634,14 +656,14 @@ class LookupTableCreateCommand : GenericLookupTableCommand(
                         true
                     )
                 }
-                TermUi.echo("\tTable version ${newTableInfo.tableVersion} is now active.")
+                echo("\tTable version ${newTableInfo.tableVersion} is now active.")
             } else
-                TermUi.echo(
+                echo(
                     "\tTable version ${newTableInfo.tableVersion} " +
                         "left inactive, so don't forget to activate it."
                 )
         } else
-            TermUi.echo("\tAborted the creation of the lookup table.")
+            echo("\tAborted the creation of the lookup table.")
     }
 }
 
@@ -663,21 +685,21 @@ class LookupTableListCommand : GenericLookupTableCommand(
             throw PrintMessage("Error fetching the list of tables: ${e.message}", true)
         }
         if (showInactive)
-            TermUi.echo("Listing all lookup tables including inactive.")
+            echo("Listing all lookup tables including inactive.")
         else
-            TermUi.echo("Listing only active lookup tables.")
+            echo("Listing only active lookup tables.")
 
         if (data.isNotEmpty()) {
-            TermUi.echo(
+            echo(
                 LookupTableCommands
                     .infoToPrintableTable(data)
             )
-            TermUi.echo("")
+            echo("")
         } else {
             if (data.isEmpty() && !showInactive)
-                TermUi.echo("No lookup tables were found.")
+                echo("No lookup tables were found.")
             else
-                TermUi.echo("No active lookup tables were found.")
+                echo("No active lookup tables were found.")
         }
     }
 }
@@ -739,16 +761,16 @@ class LookupTableDiffCommand : GenericLookupTableCommand(
         }
 
         // Generate the diff.
-        TermUi.echo("Comparing lookup table $tableName versions $version1 and $version2:")
-        TermUi.echo(LookupTableCommands.infoToPrintableTable(listOf(version1Info, version2Info)))
-        TermUi.echo("")
+        echo("Comparing lookup table $tableName versions $version1 and $version2:")
+        echo(LookupTableCommands.infoToPrintableTable(listOf(version1Info, version2Info)))
+        echo("")
 
         val output = LookupTableCommands.generateDiff(version1Table, version2Table, fullDiff)
 
         if (output.isNotEmpty()) {
-            output.forEach { TermUi.echo(it) }
+            output.forEach { echo(it) }
         } else
-            TermUi.echo("Lookup table $tableName version $version1 and $version2 are identical.")
+            echo("Lookup table $tableName version $version1 and $version2 are identical.")
     }
 }
 
@@ -793,23 +815,23 @@ class LookupTableActivateCommand : GenericLookupTableCommand(
                 )
 
             currentlyActiveTable == null ->
-                TermUi.echo("Lookup table $tableName is not currently active")
+                echo("Lookup table $tableName is not currently active")
 
             else ->
-                TermUi.echo(
+                echo(
                     "Current Lookup table $tableName's active version number is " +
                         "${currentlyActiveTable.tableVersion}"
                 )
         }
 
-        if (TermUi.confirm("Set $version as active?") == true) {
+        if (confirm("Set $version as active?") == true) {
             val activatedStatus = tableUtil.activateTable(tableName, version)
             if (activatedStatus.isActive)
-                TermUi.echo("Version $version for lookup table $tableName was set active.")
+                echo("Version $version for lookup table $tableName was set active.")
             else
                 error("Unknown error when setting lookup table $tableName Version $version to active.")
         } else
-            TermUi.echo("Aborted the activation of the lookup table.")
+            echo("Aborted the activation of the lookup table.")
     }
 }
 
@@ -867,7 +889,7 @@ class LookupTableLoadAllCommand : GenericLookupTableCommand(
         if (environment != Environment.LOCAL) error("This command is only allowed in the local environment.")
 
         // First wait for the API to come online
-        TermUi.echo("Waiting for the API at ${environment.url} to be available...")
+        echo("Waiting for the API at ${environment.url} to be available...")
         CommandUtilities.waitForApi(environment, connRetries)
 
         // Get the list of current tables to only update or create new ones.
@@ -884,23 +906,23 @@ class LookupTableLoadAllCommand : GenericLookupTableCommand(
             error("Directory ${dir.absolutePath} does not exist")
         }
 
-        TermUi.echo("Loading ${files.size} tables from ${dir.absolutePath}...")
+        echo("Loading ${files.size} tables from ${dir.absolutePath}...")
         files.forEach {
             val tableName = it.nameWithoutExtension
 
             var needToLoad = true
-            // If we have a table in the database then only update it if the last modified time of the file is 
+            // If we have a table in the database then only update it if the last modified time of the file is
             // greater than the created time in the database.
             if (checkLastModified && tableUpdateTimes.contains(tableName) && tableUpdateTimes[tableName] != null) {
                 val fileUpdatedTime = Instant.ofEpochMilli(it.lastModified())
                 if (!fileUpdatedTime.isAfter(tableUpdateTimes[tableName]!!.toInstant())) {
                     needToLoad = false
-                    TermUi.echo("Skipping $tableName since it has not been updated.")
+                    echo("Skipping $tableName since it has not been updated.")
                 }
             }
 
             if (needToLoad) {
-                TermUi.echo("Creating table $tableName...")
+                echo("Creating table $tableName...")
                 val args: MutableList<String> = mutableListOf(
                     "-e", environment.toString().lowercase(), "-n", tableName,
                     "-i", it.absolutePath, "-s", "-a"
@@ -909,6 +931,6 @@ class LookupTableLoadAllCommand : GenericLookupTableCommand(
                 tableCreator.main(args)
             }
         }
-        TermUi.echo("Done.")
+        echo("Done.")
     }
 }

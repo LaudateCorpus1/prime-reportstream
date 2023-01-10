@@ -1,17 +1,18 @@
 package gov.cdc.prime.router.serializers
 
+import com.github.doyaaaaaken.kotlincsv.dsl.context.ExcessFieldsRowBehaviour
+import com.github.doyaaaaaken.kotlincsv.dsl.context.InsufficientFieldsRowBehaviour
 import com.github.doyaaaaaken.kotlincsv.dsl.csvReader
 import com.github.doyaaaaaken.kotlincsv.dsl.csvWriter
 import com.github.doyaaaaaken.kotlincsv.util.CSVFieldNumDifferentException
 import com.github.doyaaaaaken.kotlincsv.util.CSVParseFormatException
 import com.github.doyaaaaaken.kotlincsv.util.MalformedCSVException
-import gov.cdc.prime.router.ActionError
-import gov.cdc.prime.router.ActionLog
 import gov.cdc.prime.router.ActionLogDetail
+import gov.cdc.prime.router.ActionLogger
 import gov.cdc.prime.router.AltValueNotDefinedException
 import gov.cdc.prime.router.Element
+import gov.cdc.prime.router.InvalidReportMessage
 import gov.cdc.prime.router.Metadata
-import gov.cdc.prime.router.REPORT_MAX_ERRORS
 import gov.cdc.prime.router.REPORT_MAX_ITEMS
 import gov.cdc.prime.router.REPORT_MAX_ITEM_COLUMNS
 import gov.cdc.prime.router.Receiver
@@ -38,9 +39,7 @@ import java.io.OutputStream
 class CsvSerializer(val metadata: Metadata) : Logging {
     private data class CsvMapping(
         val useCsv: Map<String, List<Element.CsvField>>,
-        val defaultOverrides: Map<String, String> = emptyMap(),
-        val errors: List<String>,
-        val warnings: List<String>,
+        val defaultOverrides: Map<String, String> = emptyMap()
     )
 
     private data class RowResult(
@@ -61,84 +60,72 @@ class CsvSerializer(val metadata: Metadata) : Logging {
         defaultValues: Map<String, String> = emptyMap(),
         sender: Sender? = null,
     ): ReadResult {
+        val actionLogs = ActionLogger()
         val schema = metadata.findSchema(schemaName) ?: error("Internal Error: invalid schema name '$schemaName'")
-        val errors = mutableListOf<ActionLog>()
-        val warnings = mutableListOf<ActionLog>()
         val rows = mutableListOf<Map<String, String>>()
         csvReader {
             quoteChar = '"'
             delimiter = ','
             skipEmptyLine = false
-            skipMissMatchedRow = false
+            insufficientFieldsRowBehaviour = InsufficientFieldsRowBehaviour.ERROR
+            excessFieldsRowBehaviour = ExcessFieldsRowBehaviour.ERROR
         }.open(input) {
             try {
                 readAllWithHeaderAsSequence().forEach { row: Map<String, String> ->
                     rows.add(row)
                     if (rows.size > REPORT_MAX_ITEMS) {
-                        throw ActionError(
-                            ActionLog.report(
-                                "Your file's row size of ${rows.size} exceeds the maximum of $REPORT_MAX_ITEMS " +
-                                    "rows per file. Reduce the amount of rows in this file."
+                        actionLogs.error(
+                            InvalidReportMessage(
+                                "Your file's row size of ${rows.size} exceeds the maximum of " +
+                                    "$REPORT_MAX_ITEMS rows per file. Reduce the amount of rows in this file."
                             )
                         )
+                        throw actionLogs.exception
                     }
                     if (row.size > REPORT_MAX_ITEM_COLUMNS) {
-                        throw ActionError(
-                            ActionLog.report(
-                                "Number of columns in your report exceeds the maximum of $REPORT_MAX_ITEM_COLUMNS" +
-                                    " allowed. Adjust the excess columnar data in your report."
+                        actionLogs.error(
+                            InvalidReportMessage(
+                                "Number of columns in your report exceeds the maximum of " +
+                                    "$REPORT_MAX_ITEM_COLUMNS allowed. Adjust the excess columnar data in your report."
                             )
                         )
+                        throw actionLogs.exception
                     }
                 }
             } catch (ex: CSVFieldNumDifferentException) {
-                throw ActionError(
-                    ActionLog.report(
-                        "CSV file has an inconsistent number of columns on row: ${ex.csvRowNum}"
-                    )
+                actionLogs.error(
+                    InvalidReportMessage("CSV file has an inconsistent number of columns on row: ${ex.csvRowNum}")
                 )
+                throw actionLogs.exception
             } catch (ex: CSVParseFormatException) {
-                throw ActionError(
-                    ActionLog.report(
+                actionLogs.error(
+                    InvalidReportMessage(
                         "There's an issue parsing your file on row: ${ex.rowNum}. " +
                             "For additional help, contact the ReportStream team at $REPORTSTREAM_SUPPORT_EMAIL."
                     )
                 )
+                throw actionLogs.exception
             } catch (ex: MalformedCSVException) {
-                throw ActionError(
-                    ActionLog.report(
+                actionLogs.error(
+                    InvalidReportMessage(
                         "There's an issue parsing your file (Error: ${ex.message}) " +
                             "For additional help, contact the ReportStream team at $REPORTSTREAM_SUPPORT_EMAIL."
                     )
                 )
+                throw actionLogs.exception
             }
         }
 
         if (rows.isEmpty()) {
-            warnings.add(
-                ActionLog.report(
-                    "No reports were found in CSV content",
-                    ActionLog.ActionLogType.warning
-                )
-            )
-            return ReadResult(Report(schema, emptyList(), sources, destination, metadata = metadata), errors, warnings)
+            actionLogs.warn(InvalidReportMessage("No reports were found in CSV content"))
+            return ReadResult(Report(schema, emptyList(), sources, destination, metadata = metadata), actionLogs)
         }
 
-        val csvMapping = buildMappingForReading(schema, defaultValues, rows[0])
-        errors.addAll(
-            csvMapping.errors.map {
-                ActionLog.report(it)
-            }
-        )
-        warnings.addAll(
-            csvMapping.warnings.map {
-                ActionLog.report(it, ActionLog.ActionLogType.warning)
-            }
-        )
+        val csvMapping = buildMappingForReading(schema, defaultValues, rows[0], actionLogs)
 
         // at this point there are no branches that can return a non null report and errors > 0
-        if (csvMapping.errors.isNotEmpty()) {
-            throw ActionError(errors + warnings)
+        if (actionLogs.hasErrors()) {
+            throw actionLogs.exception
         }
 
         val mappedRows = rows.mapIndexedNotNull { index, row ->
@@ -148,66 +135,42 @@ class CsvSerializer(val metadata: Metadata) : Logging {
             var trackingId = if (trackingColumn != null) result.row[trackingColumn] else ""
             if (trackingId.isEmpty())
                 trackingId = "row$rowIndex"
-            // Add only add unique errors and warnings
-            errors.addAll(
-                result.errors.map {
-                    ActionLog.item(trackingId, it, rowIndex, ActionLog.ActionLogType.error)
-                }.distinct()
-            )
-            warnings.addAll(
-                result.warnings.map {
-                    ActionLog.item(trackingId, it, rowIndex, ActionLog.ActionLogType.warning)
-                }.distinct()
-            )
-            if (result.errors.isEmpty()) {
+
+            val itemLogger = actionLogs.getItemLogger(rowIndex, trackingId)
+            itemLogger.error(result.errors)
+            itemLogger.warn(result.warnings)
+            if (!actionLogs.hasErrors()) {
                 result.row
             } else {
                 null
             }
         }
-        if (errors.size > REPORT_MAX_ERRORS) {
-            errors.add(
-                ActionLog.report(
-                    "Report file failed: Number of errors exceeded threshold. Contact the ReportStream team at " +
-                        "$REPORTSTREAM_SUPPORT_EMAIL for assistance."
-                )
-            )
-            throw ActionError(errors + warnings)
-        }
-        return ReadResult(Report(schema, mappedRows, sources, destination, metadata = metadata), errors, warnings)
+
+        return ReadResult(Report(schema, mappedRows, sources, destination, metadata = metadata), actionLogs)
     }
 
     /**
-     * Reads an internal format document (one that is in CSV, but matching the internal "kitchen sink" schema)
-     * and returns the Report object for the file.
-     * @param useDefaultsForMissing if a field is missing that the Report object expects, this instructs the
-     * function to use the default value provided by the schema (or empty string) if it doesn't exist. This was
-     * added because some older files might need to be reprocessed, and this allows that to happen without error
-     * due to a missing column
+     * Reads an internal format document from [input] using the schema [schemaName]and returns the Report object for
+     * the report for a given [destination]
+     * @param sources the list of sources for this report
+     * @param blobReportId the report ID
+     * @return the report
      */
     fun readInternal(
         schemaName: String,
         input: InputStream,
         sources: List<Source>,
         destination: Receiver? = null,
-        blobReportId: ReportId? = null,
-        useDefaultsForMissing: Boolean = false
+        blobReportId: ReportId? = null
     ): Report {
-        // find our schema
         val schema = metadata.findSchema(schemaName) ?: error("Internal Error: invalid schema name '$schemaName'")
-        // get our rows
-        val rows = if (useDefaultsForMissing) {
-            // walk through the rows in the file with the header included
-            csvReader().readAllWithHeader(input).map {
-                // for each element name, if it doesn't exist in the map, then we add it with a default
-                // doing it this ways means that even if someone adds a new element in the middle of the schema
-                // (please don't), this should still be okay and it won't necessarily break
-                schema.elements.map { element ->
-                    it.getOrDefault(element.name, element.default ?: "")
-                }
+        val rows = csvReader().readAllWithHeader(input).map {
+            // For each element name, if it doesn't exist in the map, then we add it with a default.
+            // This is so we can add/remove fields/elements anywhere in a schema and not break the process step
+            // when a report has been queued and its schema changes before processing.
+            schema.elements.map { element ->
+                it.getOrDefault(element.name, element.default ?: "")
             }
-        } else {
-            csvReader().readAll(input).drop(1)
         }
         return Report(schema, rows, sources, destination, id = blobReportId, metadata = metadata)
     }
@@ -284,7 +247,8 @@ class CsvSerializer(val metadata: Metadata) : Logging {
     private fun buildMappingForReading(
         schema: Schema,
         defaultValues: Map<String, String>,
-        row: Map<String, String>
+        row: Map<String, String>,
+        actionLogs: ActionLogger
     ): CsvMapping {
         fun rowContainsAll(fields: List<Element.CsvField>): Boolean {
             return fields.find { !row.containsKey(it.name) } == null
@@ -314,14 +278,19 @@ class CsvSerializer(val metadata: Metadata) : Logging {
         val missingRequiredHeaders = requiredHeaders - actualHeaders
         val missingOptionalHeaders = optionalHeaders - actualHeaders
         val ignoredHeaders = actualHeaders - requiredHeaders - optionalHeaders - headersWithDefault
-        val errors = missingRequiredHeaders.map {
-            "Your file is missing ${schema.findElementByCsvName(it)?.fieldMapping} header."
+        missingRequiredHeaders.forEach {
+            actionLogs.error(
+                InvalidReportMessage("Your file is missing ${schema.findElementByCsvName(it)?.fieldMapping} header.")
+            )
         }
-        val warnings = missingOptionalHeaders.map {
-            "Missing ${schema.findElementByCsvName(it)?.fieldMapping} header"
-        } + ignoredHeaders.map { "Unexpected column header found, '$it' will be ignored" }
+        missingOptionalHeaders.forEach {
+            actionLogs.warn(InvalidReportMessage("Missing ${schema.findElementByCsvName(it)?.fieldMapping} header"))
+        }
+        ignoredHeaders.forEach {
+            actionLogs.warn(InvalidReportMessage("Unexpected column header found, '$it' will be ignored"))
+        }
 
-        return CsvMapping(useCsv, defaultValues, errors, warnings)
+        return CsvMapping(useCsv, defaultValues)
     }
 
     /**

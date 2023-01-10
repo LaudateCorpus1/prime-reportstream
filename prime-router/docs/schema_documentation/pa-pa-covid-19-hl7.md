@@ -1,10 +1,26 @@
 
 ### Schema: pa/pa-covid-19-hl7
 ### Topic: covid-19
-### Tracking Element: none
+### Tracking Element: (message_id)
 ### Base On: none
 ### Extends: [covid-19](./covid-19.md)
 #### Description: Pennsylvania Department of Health HL7 messages
+
+---
+
+**Name**: Screening
+
+**ReportStream Internal Name**: Screening
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: Screening
 
 ---
 
@@ -61,6 +77,38 @@ This field is generated based on the normalcy status of the result. A = abnormal
 
 ---
 
+**Name**: clia_complexity
+
+**ReportStream Internal Name**: clia_complexity
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: CLIAComplexity
+
+---
+
+**Name**: collection_kit
+
+**ReportStream Internal Name**: collection_kit
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: Collection Kit
+
+---
+
 **Name**: comment
 
 **ReportStream Internal Name**: comment
@@ -77,11 +125,9 @@ This field is generated based on the normalcy status of the result. A = abnormal
 
 **ReportStream Internal Name**: comment_source
 
-**Type**: CODE
+**Type**: ID
 
 **PII**: No
-
-**Format**: use value found in the Code column
 
 **Cardinality**: [0..1]
 
@@ -180,6 +226,22 @@ Device_id is a generated value for the OBX-17 field. It is based on the device m
 **Documentation**:
 
 Device_id_type is a generated value for the OBX-17 field. It is based on the device model and the LIVD table.
+
+---
+
+**Name**: direct_to_consumer
+
+**ReportStream Internal Name**: direct_to_consumer
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: Direct to Consumer (DTC)
 
 ---
 
@@ -334,7 +396,7 @@ Is the patient employed in a high risk setting? This AOE question doesn't have a
 
 **ReportStream Internal Name**: file_created_date
 
-**Type**: DATE
+**Type**: DATETIME
 
 **PII**: No
 
@@ -437,6 +499,22 @@ Is this the patient's first test for this condition?
 
 ---
 
+**Name**: home_collection
+
+**ReportStream Internal Name**: home_collection
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: Home Collection
+
+---
+
 **Name**: hospitalized
 
 **ReportStream Internal Name**: hospitalized
@@ -531,7 +609,7 @@ unique id to track the usage of the message
 
 **PII**: No
 
-**Default Value**: PHLabReport-NoAck^ELR_Receiver^2.16.840.1.113883.9.11^ISO
+**Default Value**: PHLabReport-NoAck
 
 **Cardinality**: [0..1]
 
@@ -541,15 +619,85 @@ The message profile identifer
 
 ---
 
+**Name**: message_profile_id_namespace_id
+
+**ReportStream Internal Name**: message_profile_id_namespace_id
+
+**Type**: TEXT
+
+**PII**: No
+
+**Default Value**: ELR_Receiver
+
+**Cardinality**: [0..1]
+
+**Documentation**:
+
+The message profile identifer namespace id
+
+---
+
+**Name**: message_profile_id_universal_id
+
+**ReportStream Internal Name**: message_profile_id_universal_id
+
+**Type**: TEXT
+
+**PII**: No
+
+**Default Value**: 2.16.840.1.113883.9.11
+
+**Cardinality**: [0..1]
+
+**Documentation**:
+
+The message profile identifer universal id
+
+---
+
+**Name**: message_profile_id_universal_id_type
+
+**ReportStream Internal Name**: message_profile_id_universal_id_type
+
+**Type**: TEXT
+
+**PII**: No
+
+**Default Value**: ISO
+
+**Cardinality**: [0..1]
+
+**Documentation**:
+
+The message profile identifer universal id type
+
+---
+
+**Name**: nonprescription_testing
+
+**ReportStream Internal Name**: nonprescription_testing
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: Non-prescription Testing
+
+---
+
 **Name**: observation_result_status
 
 **ReportStream Internal Name**: observation_result_status
 
-**Type**: CODE
+**Type**: ID
 
 **PII**: No
 
-**Format**: use value found in the Code column
+**Default Value**: F
 
 **Cardinality**: [0..1]
 
@@ -576,11 +724,11 @@ X|Results cannot be obtained for this observation|HL7
 
 **ReportStream Internal Name**: order_result_status
 
-**Type**: CODE
+**Type**: ID
 
 **PII**: No
 
-**Format**: use value found in the Code column
+**Default Value**: F
 
 **Cardinality**: [0..1]
 
@@ -719,6 +867,10 @@ The city of the facility which the test was ordered from
 **Default Value**: USA
 
 **Cardinality**: [0..1]
+
+**Documentation**:
+
+The country of the facility
 
 ---
 
@@ -893,6 +1045,10 @@ The city of the provider
 **Default Value**: USA
 
 **Cardinality**: [0..1]
+
+**Documentation**:
+
+The country of the provider
 
 ---
 
@@ -1176,13 +1332,29 @@ The SimpleReport concept of organization. It refers to organization for the orde
 
 ---
 
+**Name**: over_the_counter_home_testing
+
+**ReportStream Internal Name**: over_the_counter_home_testing
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: Over the Counter (OTC) Home Testing
+
+---
+
 **Name**: patient_age
 
 **ReportStream Internal Name**: patient_age
 
 **Type**: NUMBER
 
-**PII**: No
+**PII**: Yes
 
 **LOINC Code**: 30525-0
 
@@ -3440,6 +3612,22 @@ Is the patient pregnant?
 
 ---
 
+**Name**: prescription_home_testing
+
+**ReportStream Internal Name**: prescription_home_testing
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: Prescription Home Testing
+
+---
+
 **Name**: previous_message_id
 
 **ReportStream Internal Name**: previous_message_id
@@ -3638,6 +3826,49 @@ The reporting facility's name
 
 ---
 
+**Name**: residence_type
+
+**ReportStream Internal Name**: residence_type
+
+**Type**: CODE
+
+**PII**: No
+
+**Format**: use value found in the Code column
+
+**LOINC Code**: 75617-1
+
+**Cardinality**: [0..1]
+
+**Value Sets**
+
+Code | Display | System
+---- | ------- | ------
+22232009|Hospital|SNOMED_CT
+2081004|Hospital Ship|SNOMED_CT
+32074000|Long Term Care Hospital|SNOMED_CT
+224929004|Secure Hospital|SNOMED_CT
+42665001|Nursing Home|SNOMED_CT
+30629002|Retirement Home|SNOMED_CT
+74056004|Orphanage|SNOMED_CT
+722173008|Prison-based Care Site|SNOMED_CT
+20078004|Substance Abuse Treatment Center|SNOMED_CT
+257573002|Boarding House|SNOMED_CT
+224683003|Military Accommodation|SNOMED_CT
+284546000|Hospice|SNOMED_CT
+257628001|Hostel|SNOMED_CT
+310207003|Sheltered Housing|SNOMED_CT
+57656006|Penal Institution|SNOMED_CT
+285113009|Religious Institutional Residence|SNOMED_CT
+285141008|Work (environment)|SNOMED_CT
+32911000|Homeless|SNOMED_CT
+
+**Documentation**:
+
+Congregate Setting Residence Type?
+
+---
+
 **Name**: resident_congregate_setting
 
 **ReportStream Internal Name**: resident_congregate_setting
@@ -3715,6 +3946,22 @@ The name and OID for the application sending information to the receivers
 
 ---
 
+**Name**: serial_screening
+
+**ReportStream Internal Name**: serial_screening
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: Serial Screening
+
+---
+
 **Name**: site_of_care
 
 **ReportStream Internal Name**: site_of_care
@@ -3727,7 +3974,7 @@ The name and OID for the application sending information to the receivers
 
 **Documentation**:
 
-The type of facility providing care (Hospital, Nursing Home, etc.).
+The type of facility providing care (Hospital, Nursing Home, etc.).  This is a CUSTOM internal field. DO NOT use this for the COVID AOE residence_type.
 
 ---
 
@@ -3924,6 +4171,9 @@ Code | Display | System
 29092000|Venous structure (body structure)|SNOMED_CT
 123851003|Mouth region structure (body structure)|SNOMED_CT
 31389004|Oropharyngeal structure (body structure)|SNOMED_CT
+39607008|Lung structure (body structure)|SNOMED_CT
+955009|Bronchial structure (body structure)|SNOMED_CT
+1797002|Structure of anterior nares (body structure)|SNOMED_CT
 
 **Documentation**:
 
@@ -3965,6 +4215,10 @@ Code | Display | System
 122555007|Venous blood specimen|SNOMED_CT
 119297000|Blood specimen|SNOMED_CT
 122554006|Capillary blood specimen|SNOMED_CT
+258467004|Nasopharyngeal washings|SNOMED_CT
+418932006|Oral swab specimen|SNOMED_CT
+433801000124107|Nasopharyngeal and oropharyngeal swab|SNOMED_CT
+309171007|Lower respiratory fluid sample|SNOMED_CT
 
 **Documentation**:
 
@@ -3997,6 +4251,22 @@ UNK|Unknown|NULLFL
 **Documentation**:
 
 Is the patient symptomatic?
+
+---
+
+**Name**: telehealth_proctor_supervised
+
+**ReportStream Internal Name**: telehealth_proctor_supervised
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: Telehealth Proctor Supervised
 
 ---
 
@@ -4151,6 +4421,22 @@ Follows guidance for OBX-17-7 where the version of the CWE field is passed along
 **Table**: LIVD-SARS-CoV-2
 
 **Table Column**: Testkit Name ID Type
+
+---
+
+**Name**: test_method
+
+**ReportStream Internal Name**: test_method
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: Test Method
 
 ---
 
@@ -4319,11 +4605,6 @@ The result of the test performed. For IgG, IgM and CT results that give a numeri
 
 **Format**: use value found in the Code column
 
-**HL7 Fields**
-
-- [OBR-25-1](https://hl7-definition.caristix.com/v2/HL7v2.5.1/Fields/OBR.25.1)
-- [OBX-11-1](https://hl7-definition.caristix.com/v2/HL7v2.5.1/Fields/OBX.11.1)
-
 **Cardinality**: [0..1]
 
 **Value Sets**
@@ -4376,6 +4657,22 @@ the test result is in some intermediate status, is a correction, or is the final
 **Documentation**:
 
 The units the test result is measured in.
+
+---
+
+**Name**: test_type
+
+**ReportStream Internal Name**: test_type
+
+**Type**: TABLE
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+**Table**: LIVD-SARS-CoV-2
+
+**Table Column**: TestType
 
 ---
 
@@ -4530,6 +4827,30 @@ This is the assigner of the CLIA for the testing lab. If the testing lab has a C
 
 ---
 
+**Name**: testing_lab_id_universal_id
+
+**ReportStream Internal Name**: testing_lab_id_universal_id
+
+**Type**: TEXT
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+---
+
+**Name**: testing_lab_id_universal_id_type
+
+**ReportStream Internal Name**: testing_lab_id_universal_id_type
+
+**Type**: TEXT
+
+**PII**: No
+
+**Cardinality**: [0..1]
+
+---
+
 **Name**: testing_lab_name
 
 **ReportStream Internal Name**: testing_lab_name
@@ -4680,11 +5001,9 @@ The postal code for the testing lab
 
 **ReportStream Internal Name**: value_type
 
-**Type**: CODE
+**Type**: ID
 
 **PII**: No
-
-**Format**: use value found in the Code column
 
 **Cardinality**: [0..1]
 

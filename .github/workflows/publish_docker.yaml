@@ -17,8 +17,8 @@ jobs:
       has_dnsmasq_change: ${{ steps.skip_check.outputs.dnsmasq }}
     steps:
       - name: "Check out changes"
-        uses: actions/checkout@v2
-      - uses: dorny/paths-filter@v2
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
+      - uses: dorny/paths-filter@4512585405083f25c027a35db413c2b3b9006d50
         id: skip_check
         with:
           list-files: csv
@@ -45,10 +45,10 @@ jobs:
       packages: write
     steps:
       - name: Check Out Changes
-        uses: actions/checkout@v2
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
 
       - name: Log In to the Container Registry
-        uses: docker/login-action@42d299face0c5c43a0487c477f595ac9cf22f1a7
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -77,13 +77,13 @@ jobs:
       packages: write
     strategy:
       matrix:
-        AZ_ENV: [ rkh5012, test, staging, prod ]
+        AZ_ENV: [ demo1, demo2, demo3, test, staging, prod ]
     steps:
       - name: Check Out Changes
-        uses: actions/checkout@v2
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b
 
       - name: Log In to the Container Registry
-        uses: docker/login-action@42d299face0c5c43a0487c477f595ac9cf22f1a7
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}

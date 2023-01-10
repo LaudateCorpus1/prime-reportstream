@@ -61,8 +61,7 @@ class Translator(private val metadata: Metadata, private val settings: SettingsP
                 // catching individual translation exceptions enables overall work to continue
                 warnings.add(
                     ActionLog(
-                        ActionLog.ActionLogScope.translation,
-                        InvalidTranslationMessage.new(e.localizedMessage),
+                        InvalidTranslationMessage(e.localizedMessage),
                         "TO:${receiver.fullName}:${receiver.schemaName}",
                         reportId = input.id,
                     )
@@ -106,6 +105,11 @@ class Translator(private val metadata: Metadata, private val settings: SettingsP
         // vast majority of receivers will return here, which speeds subsequent filters.
         // ok to just return null, we don't need any info about what was eliminated.
         if (jurisFilteredReport.isEmpty()) return null
+
+        // keep track of how many items passed the juris filter prior to quality filtering.
+        // For informational/reporting purposes only.
+        // Normally this value is passed from parent to child Report, like mitochondrial DNA.  This overrides that.
+        jurisFilteredReport.itemCountBeforeQualFilter = jurisFilteredReport.itemCount
 
         // Do qualityFiltering on the jurisFilteredReport
         val qualityFilteredReport = filterByOneFilterType(
@@ -220,10 +224,11 @@ class Translator(private val metadata: Metadata, private val settings: SettingsP
             doLogging,
             trackingElement,
             // the reverseTheQualityFilter flag only applies for qualityFilters
-            if (filterType == ReportStreamFilterType.QUALITY_FILTER) receiver.reverseTheQualityFilter else false
+            if (filterType == ReportStreamFilterType.QUALITY_FILTER) receiver.reverseTheQualityFilter else false,
+            filterType
         )
         if (doLogging && filteredReport.itemCount != input.itemCount) {
-            logger.warn(
+            logger.info(
                 "Filtering occurred in report ${input.id}, receiver ${receiver.fullName}: " +
                     "There were ${input.itemCount} rows prior to ${filterType.name}, and " +
                     "${filteredReport.itemCount} rows after ${filterType.name}."
@@ -265,7 +270,7 @@ class Translator(private val metadata: Metadata, private val settings: SettingsP
         // Transform reports
         var transformed = toReport
         if (receiver.deidentify)
-            transformed = transformed.deidentify()
+            transformed = transformed.deidentify(receiver.deidentifiedValue)
         val copy = transformed.copy(destination = receiver, bodyFormat = receiver.format)
         copy.filteringResults.addAll(input.filteringResults)
         return copy

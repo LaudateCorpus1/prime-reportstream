@@ -4,11 +4,6 @@ import com.fasterxml.jackson.annotation.JsonCreator
 import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
-enum class FtpsProtocol {
-    SSL,
-    TLS
-}
-
 @JsonTypeInfo(
     use = JsonTypeInfo.Id.NAME,
     include = JsonTypeInfo.As.EXISTING_PROPERTY,
@@ -20,9 +15,9 @@ enum class FtpsProtocol {
     JsonSubTypes.Type(BlobStoreTransportType::class, name = "BLOBSTORE"),
     JsonSubTypes.Type(NullTransportType::class, name = "NULL"),
     JsonSubTypes.Type(AS2TransportType::class, name = "AS2"),
-    JsonSubTypes.Type(FTPSTransportType::class, name = "FTPS"),
     JsonSubTypes.Type(SoapTransportType::class, name = "SOAP"),
-    JsonSubTypes.Type(GAENTransportType::class, name = "GAEN")
+    JsonSubTypes.Type(GAENTransportType::class, name = "GAEN"),
+    JsonSubTypes.Type(RESTTransportType::class, name = "REST")
 )
 abstract class TransportType(val type: String)
 
@@ -61,40 +56,30 @@ data class AS2TransportType
     TransportType("AS2")
 
 /**
- * FTPSTransportType
+ * The GAEN UUID Format instructs how the UUID field of the GAEN payload is built
  */
-data class FTPSTransportType
-@JsonCreator constructor(
-    val host: String,
-    val port: Int,
-    val username: String,
-    val password: String,
-    val protocol: FtpsProtocol = FtpsProtocol.SSL,
-    val binaryTransfer: Boolean = true,
-    /**
-     * @param acceptAllCerts  pass true to ignore all cert checks, helpful for testing
-     */
-    val acceptAllCerts: Boolean = false
-) : TransportType("FTPS") {
-    /**
-     * toString()
-     *
-     * Print out the parameters of the FTPSTransportType but obfuscate the password
-     *
-     * @return String
-     */
-    override fun toString(): String =
-        "host=$host, port=$port, username=$username, protocol=$protocol, binaryTransfer=$binaryTransfer"
+enum class GAENUUIDFormat {
+    PHONE_DATE, // Default if IV specified hmac_md5(phone+date, iv).toHex()
+    REPORT_ID, // Default if IV is not specified, use report stream's report id
+    WA_NOTIFY, // Use the format that WA_NOTIFY uses, must specify IV
 }
 
+/**
+ * The Google/Apple Exposure Notification transport sends a report to the Exposure Notification service
+ */
 data class GAENTransportType
 @JsonCreator constructor(
     /**
      * [apiUrl] is API URL to post to. Typically, something like https://adminapi.encv.org/api/issue.
+     * [uuidFormat] is format that is used for generating the UUID of the message.
+     * The UUID enables the GAEN system deduplicate notifications.
+     * [uuidIV] is the HMAC initialization vector (aka key) in hex
      */
     val apiUrl: String,
+    val uuidFormat: GAENUUIDFormat? = null,
+    val uuidIV: String? = null,
 ) : TransportType("GAEN") {
-    override fun toString(): String = "url=$apiUrl"
+    override fun toString(): String = "url=$apiUrl, uuidFormat=$uuidFormat, uuidIV=$uuidIV"
 }
 
 data class NullTransportType
@@ -117,4 +102,22 @@ data class SoapTransportType
     val namespaces: Map<String, String>? = null
 ) : TransportType("SOAP") {
     override fun toString(): String = "endpoint=$endpoint, soapAction=$soapAction"
+}
+
+/**
+ *  Holds the parameters for REST endpoints as defined by NY, OK, and other receivers
+ */
+
+data class RESTTransportType
+@JsonCreator constructor(
+    /**  [reportUrl] The URL to post to. e.g. https://api2.health.ny.gov/services/uphn/V1.0/ECLRSPRE. */
+    val reportUrl: String,
+    /**  [authTokenUrl] The URL to get the OAuth token. e.g. https://api2.health.ny.gov/services/uphn/V1.0/auth. */
+    val authTokenUrl: String,
+    /** [tlsKeystore]The name for the credential manager to get the JKS used in TLS/SSL */
+    val tlsKeystore: String? = null,
+    /** [headers] The map of headers to be sent in the message */
+    val headers: Map<String, String>
+) : TransportType("REST") {
+    override fun toString(): String = "apiUrl=$reportUrl"
 }

@@ -3,6 +3,7 @@ package gov.cdc.prime.router
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import gov.cdc.prime.router.unittest.UnitTestUtils
 import java.io.ByteArrayInputStream
@@ -91,12 +92,83 @@ class TranslatorTests {
                 format: CSV
     """.trimIndent()
 
-    private val one = Schema(name = "one", topic = "test", elements = listOf(Element("a")))
+    private val filterTestYamlFilterOutNegAntigenTestType = """
+        ---
+          - name: phd
+            description: Piled Higher and Deeper 
+            jurisdiction: STATE
+            filters:
+            - topic: test
+              qualityFilter: [ "filterOutNegativeAntigenTestType(test_result, 260385009, 260415000, 895231008)" ]
+            stateCode: IG
+            receivers: 
+            - name: elr
+              organizationName: phd
+              topic: test
+              customerStatus: active
+              translation: 
+                type: CUSTOM
+                schemaName: two
+                format: CSV
+    """.trimIndent()
+
+    private val one = Schema(name = "one", topic = Topic.TEST, elements = listOf(Element("a")))
+
+    @Test
+    fun `test filterOutNegativeAntigenTestUsingQualityFilter`() {
+        val mySchema = Schema(
+            name = "two", topic = Topic.TEST, trackingElement = "id",
+            elements = listOf(
+                Element("id"), Element("order_test_date"),
+                Element("ordered_test_code"), Element("test_result"), Element("test_type")
+            )
+        )
+        val metadata = UnitTestUtils.simpleMetadata.loadSchemas(mySchema)
+        val settings = FileSettings().also {
+            it.loadOrganizations(ByteArrayInputStream(filterTestYamlFilterOutNegAntigenTestType.toByteArray()))
+        }
+        val translator = Translator(metadata, settings)
+        // Table has 4 rows and 3 columns.
+        val table1 = Report(
+            mySchema,
+            listOf(
+                listOf("0", "20221103202920", "94531-1", "260385009", "antigen"), // Negative Antigen
+                listOf("1", "20221103202921", "94531-2", "10828004", "Antigen"), // Positive Antigen
+                listOf("2", "20221103202922", "94531-3", "260415000", "Antigen"), // Not Detected Antigen
+                listOf("3", "20221103202923", "94531-1", "10828004", "Serology"), // Positive but NOT Antigen
+                listOf("4", "20221103202924", "94531-2", "895231008", "antigen"), // Not detected in pooled specimen
+                listOf("5", "20221103202925", "94531-3", "260373001", "Antigen"), // Detected (Positive) Antigen
+                listOf("6", "20221103202926", "94531-1", "260385009", "Serology"), // Negative but NOT Antigen
+            ),
+            TestSource,
+            metadata = metadata,
+            itemCountBeforeQualFilter = 4,
+        )
+        val rcvr = settings.findReceiver("phd.elr")
+        assertThat(rcvr).isNotNull()
+        val org = settings.findOrganization("phd")
+        assertThat(org).isNotNull()
+
+        // Quality filter: Override the default; org filter exists.  No receiver filter.
+        translator.filterByOneFilterType(
+            table1, rcvr!!, org!!, ReportStreamFilterType.QUALITY_FILTER, mySchema.trackingElement, true
+        ).run {
+            assertThat(this.itemCount).isEqualTo(4)
+            assertThat(this.getRow(0)[0]).isEqualTo("1")
+            assertThat(this.getRow(1)[0]).isEqualTo("3")
+            assertThat(this.getRow(2)[0]).isEqualTo("5")
+            assertThat(this.getRow(3)[0]).isEqualTo("6")
+            assertThat(this.filteringResults.size).isEqualTo(3) // two rows eliminated, but one filter message.
+            assertThat(this.filteringResults[0].filteredTrackingElement).isEqualTo("0")
+            assertThat(this.filteringResults[1].filteredTrackingElement).isEqualTo("2")
+            assertThat(this.filteringResults[2].filteredTrackingElement).isEqualTo("4")
+        }
+    }
 
     @Test
     fun `test filterByOneFilterType`() {
         val mySchema = Schema(
-            name = "two", topic = "test", trackingElement = "id",
+            name = "two", topic = Topic.TEST, trackingElement = "id",
             elements = listOf(Element("id"), Element("a"), Element("b"))
         )
         val metadata = UnitTestUtils.simpleMetadata.loadSchemas(mySchema)
@@ -104,7 +176,7 @@ class TranslatorTests {
             it.loadOrganizations(ByteArrayInputStream(filterTestYaml.toByteArray()))
         }
         val translator = Translator(metadata, settings)
-        // Table has 4 rows and 2 columns.
+        // Table has 4 rows and 3 columns.
         val table1 = Report(
             mySchema,
             listOf(
@@ -114,7 +186,8 @@ class TranslatorTests {
                 listOf("3", "no", "false"), // row 3
             ),
             TestSource,
-            metadata = metadata
+            metadata = metadata,
+            itemCountBeforeQualFilter = 4,
         )
         val rcvr = settings.findReceiver("phd.elr")
         assertThat(rcvr).isNotNull()
@@ -125,6 +198,7 @@ class TranslatorTests {
             table1, rcvr!!, org!!, ReportStreamFilterType.JURISDICTIONAL_FILTER, mySchema.trackingElement, true
         ).run {
             assertThat(this.itemCount).isEqualTo(1)
+            assertThat(this.itemCountBeforeQualFilter).isEqualTo(4)
             assertThat(this.getRow(0)[0]).isEqualTo("0") // row 0 is only one left.
             assertThat(this.filteringResults.size).isEqualTo(4) // two rows eliminated, and two filter messages.
             assertThat(this.filteringResults[0].filteredTrackingElement).isEqualTo("2")
@@ -159,7 +233,7 @@ class TranslatorTests {
     @Test
     fun `test filterByOneFilterType Defaults`() {
         val mySchema = Schema(
-            name = "two", topic = "test", trackingElement = "id",
+            name = "two", topic = Topic.TEST, trackingElement = "id",
             elements = listOf(Element("id"), Element("a"), Element("b"))
         )
         val metadata = UnitTestUtils.simpleMetadata.loadSchemas(mySchema)
@@ -167,7 +241,7 @@ class TranslatorTests {
             it.loadOrganizations(ByteArrayInputStream(onlyDefaultFiltersYaml.toByteArray()))
         }
         val translator = Translator(metadata, settings)
-        // Table has 4 rows and 2 columns.
+        // Table has 4 rows and 3 columns.
         val table1 = Report(
             mySchema,
             listOf(
@@ -177,7 +251,8 @@ class TranslatorTests {
                 listOf("3", "no", "false"), // row 3
             ),
             TestSource,
-            metadata = metadata
+            metadata = metadata,
+            itemCountBeforeQualFilter = 4,
         )
         val rcvr = settings.findReceiver("xyzzy.elr")
         assertThat(rcvr).isNotNull()
@@ -188,6 +263,7 @@ class TranslatorTests {
             table1, rcvr!!, org!!, ReportStreamFilterType.JURISDICTIONAL_FILTER, mySchema.trackingElement, true
         ).run {
             assertThat(this.itemCount).isEqualTo(4)
+            assertThat(this.itemCountBeforeQualFilter).isEqualTo(4)
             // just confirm the first and last rows
             assertThat(this.getRow(0)[0]).isEqualTo("0")
             assertThat(this.getRow(1)[0]).isEqualTo("1")
@@ -200,6 +276,7 @@ class TranslatorTests {
             table1, rcvr, org, ReportStreamFilterType.QUALITY_FILTER, mySchema.trackingElement, false
         ).run {
             assertThat(this.itemCount).isEqualTo(2)
+            assertThat(this.itemCountBeforeQualFilter).isEqualTo(4)
             assertThat(this.getRow(0)[0]).isEqualTo("0")
             assertThat(this.getRow(1)[0]).isEqualTo("2")
             assertThat(this.filteringResults.size).isEqualTo(0) // no logging done.
@@ -209,6 +286,7 @@ class TranslatorTests {
             table1, rcvr, org, ReportStreamFilterType.ROUTING_FILTER, mySchema.trackingElement, true
         ).run {
             assertThat(this.itemCount).isEqualTo(2)
+            assertThat(this.itemCountBeforeQualFilter).isEqualTo(4)
             assertThat(this.getRow(0)[0]).isEqualTo("2")
             assertThat(this.getRow(1)[0]).isEqualTo("3")
             assertThat(this.filteringResults.size).isEqualTo(2) // two rows eliminated, by one rule.
@@ -220,7 +298,7 @@ class TranslatorTests {
     @Test
     fun `test filterByAllFilterTypes`() {
         val mySchema = Schema(
-            name = "two", topic = "test", trackingElement = "id",
+            name = "two", topic = Topic.TEST, trackingElement = "id",
             elements = listOf(Element("id"), Element("a"), Element("b"))
         )
         val metadata = UnitTestUtils.simpleMetadata.loadSchemas(mySchema)
@@ -228,7 +306,7 @@ class TranslatorTests {
             it.loadOrganizations(ByteArrayInputStream(filterTestYaml.toByteArray()))
         }
         val translator = Translator(metadata, settings)
-        // Table has 4 rows and 2 columns.
+        // Table has 4 rows and 3 columns.
         val table1 = Report(
             mySchema,
             listOf(
@@ -263,6 +341,7 @@ class TranslatorTests {
         translator.filterByAllFilterTypes(settings2, table1, rcvr2!!).run {
             assertThat(this).isNotNull()
             assertThat(this!!.itemCount).isEqualTo(1)
+            assertThat(this.itemCountBeforeQualFilter).isEqualTo(4)
             assertThat(this.getRow(0)[0]).isEqualTo("2")
             assertThat(this.filteringResults.size).isEqualTo(1) // three rows eliminated, only routingFilter message.
             assertThat(this.filteringResults[0].filteredTrackingElement).isEqualTo("0")
@@ -272,7 +351,7 @@ class TranslatorTests {
     @Test
     fun `test filter with missing tracking element value`() {
         val mySchema = Schema(
-            name = "one", topic = "test", trackingElement = "id",
+            name = "one", topic = Topic.TEST, trackingElement = "id",
             elements = listOf(Element("id"), Element("a"))
         )
         val metadata = UnitTestUtils.simpleMetadata.loadSchemas(mySchema)
@@ -302,6 +381,7 @@ class TranslatorTests {
         ).run {
             assertThat(this).isNotNull()
             assertThat(this.itemCount).isEqualTo(2)
+            assertThat(this.itemCountBeforeQualFilter).isNull()
             assertThat(this.getRow(0)[0]).isEqualTo("x") // row 0
             assertThat(this.getRow(1)[0]).isEqualTo("") // row 0
             assertThat(this.filteringResults.size).isEqualTo(2) // two rows eliminated by one filter
@@ -314,7 +394,7 @@ class TranslatorTests {
 
     @Test
     fun `test buildMapping`() {
-        val two = Schema(name = "two", topic = "test", elements = listOf(Element("a"), Element("b")))
+        val two = Schema(name = "two", topic = Topic.TEST, elements = listOf(Element("a"), Element("b")))
         val metadata = UnitTestUtils.simpleMetadata.loadSchemas(one, two)
         val translator = Translator(metadata, FileSettings())
         translator.buildMapping(fromSchema = one, toSchema = two, defaultValues = emptyMap()).run {
@@ -336,7 +416,7 @@ class TranslatorTests {
     @Test
     fun `test buildMapping with default`() {
         val twoWithDefault = Schema(
-            name = "two", topic = "test", elements = listOf(Element("a"), Element("b", default = "x"))
+            name = "two", topic = Topic.TEST, elements = listOf(Element("a"), Element("b", default = "x"))
         )
         val metadata = UnitTestUtils.simpleMetadata.loadSchemas(one, twoWithDefault)
         val translator = Translator(metadata, FileSettings())
@@ -350,7 +430,7 @@ class TranslatorTests {
     fun `test buildMapping with missing`() {
         val three = Schema(
             name = "three",
-            topic = "test",
+            topic = Topic.TEST,
             elements = listOf(Element("a"), Element("c", cardinality = Element.Cardinality.ONE))
         )
         val metadata = UnitTestUtils.simpleMetadata.loadSchemas(one, three)
@@ -365,7 +445,7 @@ class TranslatorTests {
 
     @Test
     fun `test filterAndTranslateByReceiver`() {
-        val theSchema = Schema(name = "one", topic = "test", elements = listOf(Element("a"), Element("b")))
+        val theSchema = Schema(name = "one", topic = Topic.TEST, elements = listOf(Element("a"), Element("b")))
         val metadata = UnitTestUtils.simpleMetadata.loadSchemas(theSchema)
         val settings = FileSettings().also {
             it.loadOrganizations(ByteArrayInputStream(receiversYaml.toByteArray()))

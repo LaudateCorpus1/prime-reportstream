@@ -1,0 +1,70 @@
+name:
+  type: STRING
+  valueOf: MSH.5
+  expressionType: HL7Spec
+
+endpoint:
+  type: URL
+  required: true
+  valueOf: MSH.25 | MSH.6
+  expressionType: HL7Spec
+
+# For OIDs
+extension_1:
+  generateList: true
+  valueOf: extension/Extension
+  expressionType: resource
+  condition: $idStr NOT_NULL && $systemStr EQUALS ISO
+  vars:
+    idStr: String, MSH.5.2
+    value: $oidUrlPrefix + MSH.5.2
+    systemStr: String, MSH.5.3
+  constants:
+    oidUrlPrefix: "urn:oid:"
+    KEY_NAME_SUFFIX: Oid
+    urlValue: application-identifier
+
+# For all other ID types
+extension_2:
+  generateList: true
+  valueOf: extension/Extension
+  expressionType: resource
+  condition: $idStr NOT_NULL && $systemStr NOT_EQUALS ISO
+  vars:
+    idStr: String, MSH.5.2
+    value: $idUrlPrefix + MSH.5.2
+    systemStr: String, MSH.5.3
+  constants:
+    idUrlPrefix: "urn:id:"
+    KEY_NAME_SUFFIX: String
+    urlValue: application-identifier
+
+# For OIDs
+extension_3:
+  generateList: true
+  valueOf: extension/Extension
+  expressionType: resource
+  condition: $idStr NOT_NULL && $systemStr EQUALS ISO
+  vars:
+    idStr: String, MSH.6.2
+    value: $oidUrlPrefix + MSH.6.2
+    systemStr: String, MSH.6.3
+  constants:
+    oidUrlPrefix: "urn:oid:"
+    KEY_NAME_SUFFIX: Oid
+    urlValue: facility-identifier
+
+# For all other ID types
+extension_4:
+  generateList: true
+  valueOf: extension/Extension
+  expressionType: resource
+  condition: $idStr NOT_NULL && $systemStr NOT_EQUALS ISO
+  vars:
+    idStr: String, MSH.6.2
+    value: $idUrlPrefix + MSH.6.2
+    systemStr: String, MSH.6.3
+  constants:
+    idUrlPrefix: "urn:id:"
+    KEY_NAME_SUFFIX: String
+    urlValue: facility-identifier

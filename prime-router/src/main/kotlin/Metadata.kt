@@ -14,9 +14,10 @@ import gov.cdc.prime.router.metadata.HashMapper
 import gov.cdc.prime.router.metadata.IfNPIMapper
 import gov.cdc.prime.router.metadata.IfNotPresentMapper
 import gov.cdc.prime.router.metadata.IfPresentMapper
+import gov.cdc.prime.router.metadata.IfThenElseMapper
 import gov.cdc.prime.router.metadata.LIVDLookupMapper
 import gov.cdc.prime.router.metadata.LookupMapper
-import gov.cdc.prime.router.metadata.LookupSenderValuesetsMapper
+import gov.cdc.prime.router.metadata.LookupSenderAutomationValuesets
 import gov.cdc.prime.router.metadata.LookupTable
 import gov.cdc.prime.router.metadata.Mapper
 import gov.cdc.prime.router.metadata.Mappers
@@ -26,6 +27,7 @@ import gov.cdc.prime.router.metadata.NullMapper
 import gov.cdc.prime.router.metadata.Obx17Mapper
 import gov.cdc.prime.router.metadata.Obx17TypeMapper
 import gov.cdc.prime.router.metadata.Obx8Mapper
+import gov.cdc.prime.router.metadata.PatientAgeMapper
 import gov.cdc.prime.router.metadata.SplitByCommaMapper
 import gov.cdc.prime.router.metadata.SplitMapper
 import gov.cdc.prime.router.metadata.StripNonNumericDataMapper
@@ -36,6 +38,7 @@ import gov.cdc.prime.router.metadata.TrimBlanksMapper
 import gov.cdc.prime.router.metadata.UseMapper
 import gov.cdc.prime.router.metadata.UseSenderSettingMapper
 import gov.cdc.prime.router.metadata.ZipCodeToCountyMapper
+import gov.cdc.prime.router.metadata.ZipCodeToStateMapper
 import org.apache.logging.log4j.kotlin.Logging
 import org.jooq.exception.DataAccessException
 import java.io.File
@@ -69,13 +72,16 @@ class Metadata : Logging {
         StripNumericDataMapper(),
         SplitMapper(),
         ZipCodeToCountyMapper(),
+        ZipCodeToStateMapper(),
         SplitByCommaMapper(),
         TimestampMapper(),
         HashMapper(),
         NullMapper(),
-        LookupSenderValuesetsMapper(),
         NpiLookupMapper(),
-        CountryMapper()
+        CountryMapper(),
+        LookupSenderAutomationValuesets(),
+        IfThenElseMapper(),
+        PatientAgeMapper()
     )
     private var reportStreamFilterDefinitions = listOf(
         FilterByCounty(),
@@ -84,9 +90,12 @@ class Metadata : Logging {
         OrEquals(),
         HasValidDataFor(),
         HasAtLeastOneOf(),
+        AtLeastOneHasValue(),
         AllowAll(),
         AllowNone(),
         IsValidCLIA(),
+        InDateInterval(),
+        FilterOutNegativeAntigenTestType(),
     )
     private var valueSets = mapOf<String, ValueSet>()
     private val mapper = ObjectMapper(YAMLFactory()).registerModule(
@@ -253,19 +262,19 @@ class Metadata : Logging {
         val valueSet = element.valueSet ?: baseElement?.valueSet
         val valueSetRef = valueSet?.let {
             val ref = findValueSet(it)
-                ?: error("Schema Error: '$valueSet' is missing in element '{$element.name}'")
+                ?: error("Schema Error: '$valueSet' is missing in element '${element.name}'")
             ref.mergeAltValues(element.altValues)
         }
         val table = element.table ?: baseElement?.table
         val tableRef = table?.let {
             findLookupTable(it)
-                ?: error("Schema Error: '$table' is missing in element '{$element.name}'")
+                ?: error("Schema Error: '$table' is missing in element '${element.name}'")
         }
         val mapper = element.mapper ?: baseElement?.mapper
         val refAndArgs: Pair<Mapper, List<String>>? = mapper?.let {
             val (name, args) = Mappers.parseMapperField(it)
             val ref: Mapper = findMapper(name)
-                ?: error("Schema Error: Could not find mapper '$name' in element '{$element.name}'")
+                ?: error("Schema Error: Could not find mapper '$name' in element '${element.name}'")
             Pair(ref, args)
         }
         val fullElement = if (baseElement != null) element.inheritFrom(baseElement) else element

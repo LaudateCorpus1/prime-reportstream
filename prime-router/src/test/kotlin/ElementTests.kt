@@ -15,6 +15,7 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.assertions.size
 import assertk.assertions.startsWith
+import gov.cdc.prime.router.common.DateUtilities
 import gov.cdc.prime.router.metadata.ConcatenateMapper
 import gov.cdc.prime.router.metadata.ElementAndValue
 import gov.cdc.prime.router.metadata.LIVDLookupMapper
@@ -25,8 +26,6 @@ import gov.cdc.prime.router.metadata.NullMapper
 import gov.cdc.prime.router.metadata.TrimBlanksMapper
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import kotlin.test.Test
@@ -124,13 +123,13 @@ internal class ElementTests {
         )
         // Iso formatted should work
         one.toNormalized("1998-03-30T12:00Z").run {
-            assertThat(this).isEqualTo("199803301200+0000")
+            assertThat(this).isEqualTo("19980330120000+0000")
         }
         one.toNormalized("199803300000+0000").run {
-            assertThat(this).isEqualTo("199803300000+0000")
+            assertThat(this).isEqualTo("19980330000000+0000")
         }
         one.toNormalized("20210908105903").run {
-            assertThat(this).startsWith("202109081059")
+            assertThat(this).startsWith("20210908105903+0000")
         }
         val two = Element(
             "a",
@@ -143,34 +142,24 @@ internal class ElementTests {
             o.replace(":", "")
         }
         two.toNormalized("19980330", "yyyyMMdd").run {
-            assertThat(this).isEqualTo("199803300000$offset")
+            assertThat(this).isEqualTo("19980330000000$offset")
         }
         val three = Element(
             "a",
             type = Element.Type.DATETIME,
         )
         three.toNormalized("2020-12-09", dateFormat).run {
-            assertThat(this).isEqualTo("202012090000$offset")
-        }
-        mapOf(
-            "20210908105903" to "20210908105903",
-            "199803300000+0000" to "19980330000000"
-        ).forEach {
-            val optionalDateTime = "[yyyyMMddHHmmssZ][yyyyMMddHHmmZ][yyyyMMddHHmmss]"
-            val df = DateTimeFormatter.ofPattern(optionalDateTime)
-            val ta = df.parseBest(it.key, OffsetDateTime::from, LocalDateTime::from, Instant::from)
-            val dt = LocalDateTime.from(ta)
-            assertThat(df.format(dt)).isEqualTo(it.value)
+            assertThat(this).isEqualTo("20201209000000$offset")
         }
         // edge cases
         one.toNormalized("1998-03-30T12:00Z ").run {
-            assertThat(this).isEqualTo("199803301200+0000")
+            assertThat(this).isEqualTo("19980330120000+0000")
         }
         one.toNormalized(" 1998-03-30T12:00Z").run {
-            assertThat(this).isEqualTo("199803301200+0000")
+            assertThat(this).isEqualTo("19980330120000+0000")
         }
         one.toNormalized(" 1998-03-30T12:00Z ").run {
-            assertThat(this).isEqualTo("199803301200+0000")
+            assertThat(this).isEqualTo("19980330120000+0000")
         }
         one.toNormalized("").run {
             assertThat(this).isEqualTo("")
@@ -185,11 +174,11 @@ internal class ElementTests {
             "19980330 09:35:00", "1998-03-30 9:35:00", "1998-03-30 09:35:00"
         )
         testTimes.forEach {
-            assertThat(one.toNormalized(it)).isEqualTo("199803300935-0600")
+            assertThat(one.toNormalized(it)).isEqualTo("19980330093500+0000")
         }
         testTimes = listOf("11/30/1998 16:35", "1998/11/30 16:35", "19981130 16:35:00", "1998-11-30 16:35:00")
         testTimes.forEach {
-            assertThat(one.toNormalized(it)).isEqualTo("199811301635-0600")
+            assertThat(one.toNormalized(it)).isEqualTo("19981130163500+0000")
         }
     }
 
@@ -234,114 +223,6 @@ internal class ElementTests {
         // Given datetime format and expect to return only date.
         two.toFormatted("20201203", "$dateFormat HH:mm:ss").run {
             assertThat(this).isEqualTo("2020-12-03 00:00:00")
-        }
-    }
-
-    @Test
-    fun `test getDate output format`() {
-        val two = Element(
-            "a",
-            type = Element.Type.DATE,
-        )
-
-        // Check LocalDate output formate
-        val localDate = LocalDate.parse("2020-12-01")
-        two.getDate(localDate, dateFormat).run {
-            assertThat(this).isEqualTo("2020-12-01")
-        }
-
-        // Check LocalDateTime output format.
-        val localDateTime = LocalDateTime.parse("2018-12-12T13:30:30")
-        two.getDate(localDateTime, "M/d/yyyy HH:nn").run {
-            assertThat(this).isEqualTo("12/12/2018 13:00")
-        }
-
-        // Check OffsetDateTime output format.
-        val offsetDateTime = OffsetDateTime.parse("2018-12-12T13:30:30+05:00")
-        two.getDate(offsetDateTime, "$dateFormat HH:mm:ss").run {
-            assertThat(this).isEqualTo("2018-12-12 13:30:30")
-        }
-
-        // Check OffsetDateTime output format.
-        val instant = Instant.parse("2020-12-03T13:30:30.000Z")
-        two.getDate(instant, dateFormat).run {
-            assertThat(this).isEqualTo("2020-12-03T13:30:30Z")
-        }
-
-        // now let's check some other date formats
-        val parser = DateTimeFormatter.ofPattern(
-            "[yyyy-MM-dd'T'HH:mm:ssZ]" +
-                "[yyyy-MM-dd'T'HH:mm:ssxxx]" +
-                "[yyyy-MM-dd'T'HH:mm:ssx]"
-        )
-        // Check OffsetDateTime output format.
-        listOf(
-            "2018-12-12T13:30:30+00:00",
-            "2018-12-12T13:30:30+00",
-            "2018-12-12T13:30:30+0000",
-        ).forEach { date ->
-            val odt = parser.parseBest(date, OffsetDateTime::from, Instant::from)
-            two.getDate(odt, "$dateFormat HH:mm:ss").run {
-                assertThat(this).isEqualTo("2018-12-12 13:30:30")
-            }
-            two.getDate(odt, "$dateFormat HH:mm:ssZZZ").run {
-                assertThat(this).isEqualTo("2018-12-12 13:30:30+0000")
-            }
-            // now check converting the date time to the negative offset
-            two.getDate(odt, "$dateFormat HH:mm:ssZZZ", true).run {
-                assertThat(this).isEqualTo("2018-12-12 13:30:30-0000")
-            }
-        }
-    }
-
-    @Test
-    fun `test convert positive zero offset to negative offset`() {
-        Element("a", type = Element.Type.DATE).run {
-            // all happy path tests
-            Element.convertPositiveOffsetToNegativeOffset("2022-01-05 08:00:00").run {
-                assertThat(this).isEqualTo("2022-01-05 08:00:00")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("2022-01-05 08:00:00+0000").run {
-                assertThat(this).isEqualTo("2022-01-05 08:00:00-0000")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("2022-01-05 08:00:00-0000").run {
-                assertThat(this).isEqualTo("2022-01-05 08:00:00-0000")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("2022-01-05 08:00:00+00").run {
-                assertThat(this).isEqualTo("2022-01-05 08:00:00-00")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("2022-01-05 08:00:00+00:00").run {
-                assertThat(this).isEqualTo("2022-01-05 08:00:00-00:00")
-            }
-            // non-zero offsets
-            Element.convertPositiveOffsetToNegativeOffset("2022-01-05 08:00:00-0400").run {
-                assertThat(this).isEqualTo("2022-01-05 08:00:00-0400")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("2022-01-05 08:00:00+12").run {
-                assertThat(this).isEqualTo("2022-01-05 08:00:00+12")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("2022-01-05 08:00:00+03:30").run {
-                assertThat(this).isEqualTo("2022-01-05 08:00:00+03:30")
-            }
-            // some unhappy paths. Don't use these formats.
-            Element.convertPositiveOffsetToNegativeOffset("2022-01-05 08:00:00+").run {
-                assertThat(this).isEqualTo("2022-01-05 08:00:00+")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("2022+01+05 08:00:00").run {
-                assertThat(this).isEqualTo("2022+01+05 08:00:00")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("").run {
-                assertThat(this).isEqualTo("")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("     ").run {
-                assertThat(this).isEqualTo("     ")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("+0000").run {
-                assertThat(this).isEqualTo("+0000")
-            }
-            Element.convertPositiveOffsetToNegativeOffset("+0000 2022-01-05").run {
-                assertThat(this).isEqualTo("+0000 2022-01-05")
-            }
         }
     }
 
@@ -398,9 +279,107 @@ internal class ElementTests {
         one.toNormalized("+1(555)-968-5052 x5555").run {
             assertThat(this).isEqualTo("5559685052:1:5555")
         }
-        // MX phone number
-        one.toNormalized("+52-65-8888-8888").run {
-            assertThat(this).isEqualTo("6588888888:52:")
+    }
+
+    @Test
+    fun `test To Normalized International Phone`() {
+        val one = Element(
+            "a",
+            type = Element.Type.TELEPHONE,
+            csvFields = Element.csvFields("phone")
+        )
+
+        val arrayOfPhoneNumbersAndResults = listOf(
+            Pair("+1-316-667-9400", "3166679400:1:"), // US
+            Pair("(230)7136595", "2307136595:1:"), // US
+            Pair("+61 2 6214 5600", "0262145600:61:"), // AU
+            Pair("613-688-5335", "6136885335:1:"), // CA
+            Pair("+1613-688-5335", "6136885335:1:"), // CA
+            Pair("+52 55 5080 2000", "5550802000:52:") // MX
+        )
+
+        // Verify phone numbers
+        arrayOfPhoneNumbersAndResults.forEach { phoneNumberAndResult ->
+            one.toNormalized(phoneNumberAndResult.first).run {
+                assertThat(this).isEqualTo(phoneNumberAndResult.second)
+            }
+        }
+    }
+
+    @Test
+    fun `test try parse Phone Number`() {
+        listOf(
+            "+1-316-667-9400", // US
+            "(230)7136595", // US
+            "+61 2 6214 5600", // AU
+            "613-688-5335", // CA
+            "+1613-688-5335", // CA
+            "+52 55 5080 2000" // MX
+        ).forEach {
+            Element.tryParsePhoneNumber(it).run {
+                assertThat(this).isNotNull()
+            }
+        }
+
+        listOf(
+            "",
+            "abcdefghijk",
+            "           ",
+            "99999999999999999999999999999999999999999999999999999999999999",
+            "9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9",
+            null
+        ).forEach {
+            Element.tryParsePhoneNumber(it).run {
+                assertThat(this).isNull()
+            }
+        }
+    }
+
+    @Test
+    fun `test checkPhoneNumber method`() {
+        listOf(
+            "+1-316-667-9400", // US
+            "(717)531-0123", // US alternate formatting
+            "+61 2 9667 9111", // AU
+            "+61 491 578 888", // AU cell number
+            "613-688-5335", // CA
+            "+1613-688-5335", // CA
+            "+52 55 5080 2000", // MX
+            "(230)7136595", // US, but invalid area code, but pass it through anyway
+            "213 555 5555", // US format
+            "+91(213) 555 5555 # 1234", // International (India) with extension number
+            "356-683-6541 x 1234", // US with extension number
+            "(985) 845-3258", // US format
+            "+91 (714) 726-1687 ext. 7923", // International (India) with extension
+            "(818) 265-7536 ext. 5264", // US with extension
+            "(874) 951-2157 # 8562", // US with extension
+            "+52 (213)478 9621 x 548", // MX with extension
+            "(310)852-9654ext.4562", // US extension variant
+            "(946)451-7653ext1254", // US extension variant
+            "(213)353-4836#852", // US extension variant
+            "(661)187-6589x7328", // US extension variant
+        ).forEach {
+            Element.checkPhoneNumber(it, it).run {
+                assertThat(this).isNull()
+            }
+        }
+
+        listOf(
+            "",
+            "abcdefghijk",
+            "           ",
+            "99999999999999999999999999999999999999999999999999999999999999",
+            "9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9",
+            "(213)353-4836#", // Phone with # for extension but without extension number
+            "(568)785-6521ext.", // Phone with ext. for extension but without extension number
+            "(568)785-6521 ext.", // Phone with ext. for extension but without extension number variant
+            "(625)354-1039x", // Phone with x for extension but without extension number
+            "(710)104-75621485", // Phone without #, ext., ext, or x but with extension number
+            "(710)104-7562 1485", // Phone without #, ext., ext, or x but with extension number variant
+        ).forEach {
+            Element.checkPhoneNumber(it, "test field").run {
+                assertThat(this).isNotNull()
+            }
         }
     }
 
@@ -414,23 +393,23 @@ internal class ElementTests {
 
         // Test MMddyyyy, 12012021 format
         one.toNormalized("12012021").run {
-            assertThat(this).isEqualTo("202112010000-0600")
+            assertThat(this).isEqualTo("20211201000000+0000")
         }
         // Test M/d/yyyy,12/2/2021 format
         one.toNormalized("12/2/2021").run {
-            assertThat(this).isEqualTo("202112020000-0600")
+            assertThat(this).isEqualTo("20211202000000+0000")
         }
         // Test yyyy/M/d,2021/12/3
         one.toNormalized("2021/12/3").run {
-            assertThat(this).isEqualTo("202112030000-0600")
+            assertThat(this).isEqualTo("20211203000000+0000")
         }
         // Test M/d/yyyy HH:mm,12/4/2021 09:00
         one.toNormalized("12/4/2021 09:00").run {
-            assertThat(this).isEqualTo("202112040900-0600")
+            assertThat(this).isEqualTo("20211204090000+0000")
         }
         // Test yyyy/M/d HH:mm,2021/12/05 10:00
         one.toNormalized("2021/12/05 10:00").run {
-            assertThat(this).isEqualTo("202112051000-0600")
+            assertThat(this).isEqualTo("20211205100000+0000")
         }
     }
 
@@ -446,19 +425,22 @@ internal class ElementTests {
         try {
             one.toNormalized("12502021")
         } catch (e: IllegalStateException) {
-            assertThat(e.message).isEqualTo("Invalid date: '12502021' for element 'datetime' ('a')")
+            assertThat(e.message)
+                .isEqualTo("Invalid date time: '12502021' for format 'null' for element datetime (a)")
         }
         // Test wrong month = 13
         try {
             one.toNormalized("13/2/2021")
         } catch (e: IllegalStateException) {
-            assertThat(e.message).isEqualTo("Invalid date: '13/2/2021' for element 'datetime' ('a')")
+            assertThat(e.message)
+                .isEqualTo("Invalid date time: '13/2/2021' for format 'null' for element datetime (a)")
         }
         // Test wrong year = abcd
         try {
             one.toNormalized("abcd/12/3")
         } catch (e: IllegalStateException) {
-            assertThat(e.message).isEqualTo("Invalid date: 'abcd/12/3' for element 'datetime' ('a')")
+            assertThat(e.message)
+                .isEqualTo("Invalid date time: 'abcd/12/3' for format 'null' for element datetime (a)")
         }
     }
 
@@ -593,9 +575,8 @@ internal class ElementTests {
         }
 
         // return an InvalidDateMessage
-        val expected = InvalidDateMessage.new("a week ago", "'date' ('a')", null)
         val actual = checkForErrorDateElement.checkForError("a week ago", null)
-        assertThat(actual?.detailMsg()).isEqualTo(expected.detailMsg())
+        assertThat(actual is InvalidDateMessage).isTrue()
     }
 
     @Test
@@ -608,11 +589,7 @@ internal class ElementTests {
         )
 
         // nullify an invalid date if nullifyValue is true
-        assertThat(
-            checkForErrorDateTimeElementNullify.checkForError("a week ago")
-        ).isEqualTo(
-            null
-        )
+        assertThat(checkForErrorDateTimeElementNullify.checkForError("a week ago")).isNull()
 
         val checkForErrorDateTimeElement = Element(
             "a",
@@ -627,17 +604,12 @@ internal class ElementTests {
         )
 
         dateTimeStrings.forEach { dateTimeString ->
-            assertThat(
-                checkForErrorDateTimeElement.checkForError(dateTimeString)
-            ).isEqualTo(
-                null
-            )
+            assertThat(checkForErrorDateTimeElement.checkForError(dateTimeString)).isNull()
         }
 
         // return an InvalidDateMessage
-        val expected = InvalidDateMessage.new("a week ago", "'datetime' ('a')", null)
         val actual = checkForErrorDateTimeElement.checkForError("a week ago", null)
-        assertThat(actual?.detailMsg()).isEqualTo(expected.detailMsg())
+        assertThat(actual is InvalidDateMessage).isTrue()
     }
 
     @Test
@@ -656,11 +628,7 @@ internal class ElementTests {
         )
 
         dateTimeStrings.forEach { dateTimeString ->
-            assertThat(
-                checkForErrorDateTimeElement.checkForError(dateTimeString)?.type
-            ).isEqualTo(
-                ActionLogDetailType.INVALID_DATE
-            )
+            assertThat(checkForErrorDateTimeElement.checkForError(dateTimeString) is InvalidDateMessage).isTrue()
         }
     }
 
@@ -718,16 +686,15 @@ internal class ElementTests {
             type = Element.Type.DATE,
             csvFields = Element.csvFields("date")
         )
-        assertThat(
-            date.toFormatted(date.toNormalized("20201220"))
-        ).isEqualTo(
-            "20201220"
-        )
-        assertThat(
-            date.toFormatted(date.toNormalized("2020-12-20"))
-        ).isEqualTo(
-            "20201220"
-        )
+        // loop some values and test them
+        mapOf(
+            "20201215073100-0800" to "20201215",
+            "20210604072500-0400" to "20210604",
+            "20201220" to "20201220",
+            "2020-12-20" to "20201220"
+        ).forEach {
+            assertThat(date.toFormatted(date.toNormalized(it.key))).isEqualTo(it.value)
+        }
 
         // normalize manually entered date use cases
         // "M/d/yyyy", "MMddyyyy", "yyyy/M/d", "M/d/yyyy HH:mm", "yyyy/M/d HH:mm"
@@ -773,16 +740,13 @@ internal class ElementTests {
             type = Element.Type.DATETIME,
             csvFields = Element.csvFields("datetime")
         )
-        assertThat(
-            datetime.toFormatted(datetime.toNormalized("202012200000+0000"))
-        ).isEqualTo(
-            "202012200000+0000"
-        )
-        assertThat(
-            datetime.toFormatted(datetime.toNormalized("2020-12-20T00:00Z"))
-        ).isEqualTo(
-            "202012200000+0000"
-        )
+        mapOf(
+            "20201215073100-0800" to "20201215073100-0800",
+            "202012200000+0000" to "20201220000000+0000",
+            "2020-12-20T00:00Z" to "20201220000000+0000"
+        ).forEach {
+            assertThat(datetime.toFormatted(datetime.toNormalized(it.key))).isEqualTo(it.value)
+        }
 
         val hd = Element(
             "a",
@@ -892,7 +856,8 @@ internal class ElementTests {
         ).run {
             assertThat(this.truncateIfNeeded("abcde")).isEqualTo("abcde")
         }
-        Element( // zilch is an ok valuer = Element(  // maxLength is null, don't truncate.
+        Element(
+            // zilch is an ok valuer = Element(  // maxLength is null, don't truncate.
             name = "cuatro",
             type = Element.Type.TEXT,
         ).run {
@@ -965,8 +930,8 @@ internal class ElementTests {
             Element("i", Element.Type.TEXT, default = "someDefault", defaultOverridesValue = true), // 8
             Element("j", Element.Type.TEXT, defaultOverridesValue = true), // 9   (null default)
         )
-        val schema = Schema("one", "covid-19", elements)
-        val currentDate = LocalDate.now().format(Element.dateFormatter)
+        val schema = Schema("one", Topic.COVID_19, elements)
+        val currentDate = LocalDate.now().format(DateUtilities.dateFormatter)
         val mappedValues = mutableMapOf(
             elements[0].name to "TEST",
             elements[1].name to "",
@@ -1092,24 +1057,28 @@ internal class ElementTests {
         assertThat(result.errors).isEmpty()
         assertThat(result.warnings).isEmpty()
 
-        result.warning(InvalidEquipmentMessage.new(element))
+        result.warning(InvalidEquipmentMessage(element.fieldMapping))
         assertThat(result.warnings.size).isEqualTo(1)
         assertThat(result.errors).isEmpty()
 
-        result.error(InvalidEquipmentMessage.new(element))
+        result.error(InvalidEquipmentMessage(element.fieldMapping))
         assertThat(result.errors.size).isEqualTo(1)
 
         result = ElementResult(
-            "value", mutableListOf(InvalidEquipmentMessage.new(element), InvalidEquipmentMessage.new(element)),
+            "value",
             mutableListOf(
-                InvalidEquipmentMessage.new(element), InvalidEquipmentMessage.new(element),
-                InvalidEquipmentMessage.new(element)
+                InvalidEquipmentMessage(element.fieldMapping),
+                InvalidEquipmentMessage(element.fieldMapping)
+            ),
+            mutableListOf(
+                InvalidEquipmentMessage(element.fieldMapping), InvalidEquipmentMessage(element.fieldMapping),
+                InvalidEquipmentMessage(element.fieldMapping)
             )
         )
-        result.warning(InvalidEquipmentMessage.new(element))
+        result.warning(InvalidEquipmentMessage(element.fieldMapping))
         assertThat(result.warnings.size).isEqualTo(4)
         assertThat(result.errors.size).isEqualTo(2)
-        result.error(InvalidEquipmentMessage.new(element))
+        result.error(InvalidEquipmentMessage(element.fieldMapping))
         assertThat(result.errors.size).isEqualTo(3)
     }
 
@@ -1121,7 +1090,7 @@ internal class ElementTests {
         val elementD = Element("d", mapperRef = NullMapper(), default = "default")
         val elementE = Element("e", mapperRef = TrimBlanksMapper(), mapperArgs = listOf("a"))
         val schema = Schema(
-            "name", "topic",
+            "name", Topic.TEST,
             elements = listOf(elementA, elementB, elementC, elementD, elementE)
         )
 
@@ -1173,18 +1142,19 @@ internal class ElementTests {
             ): ElementResult {
                 return if (args.isEmpty()) ElementResult(null)
                 else when (args[0]) {
-                    "1warning" -> ElementResult(null).warning(InvalidEquipmentMessage.new(element))
-                    "2warnings" -> ElementResult(null).warning(InvalidEquipmentMessage.new(element))
-                        .warning(InvalidEquipmentMessage.new(element))
-                    "1error" -> ElementResult(null).error(InvalidEquipmentMessage.new(element))
-                    "2errors" -> ElementResult(null).error(InvalidEquipmentMessage.new(element))
-                        .error(InvalidEquipmentMessage.new(element))
-                    "mixed" -> ElementResult(null).error(InvalidEquipmentMessage.new(element))
-                        .warning(InvalidEquipmentMessage.new(element))
+                    "1warning" -> ElementResult(null).warning(InvalidEquipmentMessage(element.fieldMapping))
+                    "2warnings" -> ElementResult(null).warning(InvalidEquipmentMessage(element.fieldMapping))
+                        .warning(InvalidEquipmentMessage(element.fieldMapping))
+                    "1error" -> ElementResult(null).error(InvalidEquipmentMessage(element.fieldMapping))
+                    "2errors" -> ElementResult(null).error(InvalidEquipmentMessage(element.fieldMapping))
+                        .error(InvalidEquipmentMessage(element.fieldMapping))
+                    "mixed" -> ElementResult(null).error(InvalidEquipmentMessage(element.fieldMapping))
+                        .warning(InvalidEquipmentMessage(element.fieldMapping))
                     else -> throw UnsupportedOperationException()
                 }
             }
         }
+
         val elementA = Element("a", mapperRef = SomeCoolMapper())
         val elementB = Element(
             "a", mapperRef = SomeCoolMapper(), mapperArgs = listOf("1warning"),
@@ -1220,7 +1190,7 @@ internal class ElementTests {
         )
         val elementJ = Element("a", mapperRef = SomeCoolMapper(), cardinality = Element.Cardinality.ONE)
         val schema = Schema(
-            "name", "topic",
+            "name", Topic.TEST,
             elements = listOf(
                 elementA, elementB, elementC, elementD, elementE, elementF, elementG, elementH, elementI,
                 elementJ

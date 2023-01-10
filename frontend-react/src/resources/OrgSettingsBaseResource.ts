@@ -1,9 +1,9 @@
 import AuthResource from "./AuthResource";
 
-export interface MetaData {
+export interface MetaTaggedResource {
     version: number;
     createdBy: string;
-    createdAt: Date;
+    createdAt: string;
 }
 
 /**
@@ -11,7 +11,9 @@ export interface MetaData {
  */
 export default abstract class OrgSettingsBaseResource extends AuthResource {
     name: string = "";
-    readonly meta: MetaData[] = [];
+    readonly version: number = 0;
+    readonly createdBy: string = "";
+    readonly createdAt: string = "";
 
     pk() {
         return this.name;

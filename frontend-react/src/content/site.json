@@ -34,5 +34,13 @@
             "name": "ELR intake form",
             "url": "https://prime.powerappsportals.us/siw/"
         }
+    },
+    "assets": {
+        "standardCsv": {
+            "path": "/assets/csv/ReportStream-StandardCSV-ExampleData-20220509.csv"
+        },
+        "programmersGuidePdf": {
+            "path": "/assets/pdf/ReportStream-Programmers-Guide-v2.3-updated.pdf"
+        }
     }
 }

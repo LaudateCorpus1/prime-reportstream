@@ -1,38 +1,26 @@
 import React from "react";
-import { Link, Redirect } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useOktaAuth } from "@okta/okta-react";
 import { SiteAlert } from "@trussworks/react-uswds";
 import { Tokens } from "@okta/okta-auth-js";
 
 import OktaSignInWidget from "../components/OktaSignInWidget";
-import {
-    getOrganizationFromAccessToken,
-    groupToOrg,
-} from "../webreceiver-utils";
-import {
-    setStoredOktaToken,
-    useGlobalContext,
-} from "../components/GlobalContextProvider";
-import { PERMISSIONS } from "../resources/PermissionsResource";
 import { oktaSignInConfig } from "../oktaConfig";
+import { useSessionContext } from "../contexts/SessionContext";
+import { MembershipActionType } from "../hooks/UseOktaMemberships";
 
 export const Login = () => {
-    const { oktaAuth, authState } = useOktaAuth();
-    const { updateOrganization } = useGlobalContext();
+    const { oktaAuth } = useOktaAuth();
+    const { dispatch } = useSessionContext();
 
     const onSuccess = (tokens: Tokens | undefined) => {
-        let oktaGroups =
-            getOrganizationFromAccessToken(tokens?.accessToken).filter(
-                (group: string) => group !== PERMISSIONS.PRIME_ADMIN
-            ) || [];
-        setStoredOktaToken(tokens?.accessToken?.accessToken || "");
-        /* Setting az-phd as default when PrimeAdmin has no sender/receiver orgs */
-        updateOrganization(groupToOrg(oktaGroups[0]) || "az-phd");
         oktaAuth.handleLoginRedirect(tokens);
     };
 
     const onError = (err: any) => {
-        setStoredOktaToken(""); // clear on error.
+        dispatch({
+            type: MembershipActionType.RESET,
+        });
         console.log("error logging in", err);
     };
 
@@ -51,9 +39,7 @@ export const Login = () => {
         );
     };
 
-    return authState && authState.isAuthenticated ? (
-        <Redirect to={{ pathname: "/" }} />
-    ) : (
+    return (
         <>
             <MonitoringAlert />
             <OktaSignInWidget

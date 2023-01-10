@@ -1,4 +1,4 @@
-![PRIME ReportStream](https://github.com/CDCgov/prime-data-hub/workflows/Prime%20Data%20Hub/badge.svg?branch=production)
+![PRIME ReportStream](https://github.com/CDCgov/prime-reportstream/actions/workflows/build_hub.yml/badge.svg?branch=production)
 
 **General disclaimer** This repository was created for use by CDC programs to collaborate on public health related projects in support of the [CDC mission](https://www.cdc.gov/about/organization/mission.htm).  GitHub is not hosted by the CDC, but is a third party website used by CDC and its partners to share information and collaborate on software. CDC use of GitHub does not imply an endorsement of any one particular service, product, or enterprise.
 
@@ -75,7 +75,7 @@ published through the [CDC web site](http://www.cdc.gov).
 * [Disclaimer](DISCLAIMER.md)
 * [Contribution Notice](CONTRIBUTING.md)
 * [Code of Conduct](code-of-conduct.md)
-* [Getting Started as a Dev](./prime-router/docs/getting-started/getting_started.md)
+* [Getting Started as a Dev](./prime-router/docs/getting-started/getting-started.md)
 
 ## Additional Standard Notices
 Please refer to [CDC's Template Repository](https://github.com/CDCgov/template)

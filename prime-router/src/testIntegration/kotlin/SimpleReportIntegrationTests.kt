@@ -2,7 +2,7 @@ package gov.cdc.prime.router
 
 import assertk.assertThat
 import assertk.assertions.exists
-import assertk.assertions.isEmpty
+import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import gov.cdc.prime.router.serializers.CsvSerializer
 import org.apache.commons.io.FileUtils
@@ -49,7 +49,7 @@ class SimpleReportIntegrationTests {
         // 1) Ingest the file
         val fileSource = FileSource(filePath)
         val readResult = csvSerializer.readExternal(schema.name, file.inputStream(), fileSource)
-        assertThat(readResult.errors).isEmpty()
+        assertThat(readResult.actionLogs.hasErrors()).isFalse()
         // I removed this test- at this time, the SimpleReport parsing does return an empty column warning.
         //        assertTrue(readResult.warnings.isEmpty())
         val inputReport = readResult.report
@@ -73,7 +73,7 @@ class SimpleReportIntegrationTests {
         return outputFiles
     }
 
-    private fun createFakeFile(schemaName: String, numRows: Int, useInternal: Boolean = false): File {
+    private fun createFakeCovidFile(schemaName: String, numRows: Int, useInternal: Boolean = false): File {
         val schema = metadata.findSchema(schemaName) ?: error("$schemaName not found.")
         // 1) Create the fake file
         val fakeReport = FakeReport(metadata).build(
@@ -109,7 +109,7 @@ class SimpleReportIntegrationTests {
         // 1) Ingest the file
         val inputFileSource = FileSource(inputFilePath)
         val readResult = csvSerializer.readExternal(schema.name, inputFile.inputStream(), inputFileSource)
-        assertThat(readResult.errors).isEmpty()
+        assertThat(readResult.actionLogs.hasErrors()).isFalse()
         val inputReport = readResult.report
 
         // 2) Write the input report back out to a new file
@@ -162,8 +162,7 @@ class SimpleReportIntegrationTests {
     @Test
     fun `test fake simplereport data`() {
         val schemaName = "primedatainput/pdi-covid-19"
-        val fakeReportFile = createFakeFile(schemaName, 100)
-        // Run the data thru its own schema and back out again
+        val fakeReportFile = createFakeCovidFile(schemaName, 100)
         val fakeReportFile2 = readAndWrite(fakeReportFile.absolutePath, schemaName)
         compareTestResultsToExpectedResults(fakeReportFile, fakeReportFile2)
     }
@@ -171,7 +170,7 @@ class SimpleReportIntegrationTests {
     @Test
     fun `test fake pima data`() {
         val schemaName = "az/pima-az-covid-19"
-        val fakeReportFile = createFakeFile(schemaName, 100)
+        val fakeReportFile = createFakeCovidFile(schemaName, 100)
         // Run the data thru its own schema and back out again
         val fakeReportFile2 = readAndWrite(fakeReportFile.absolutePath, schemaName)
         compareTestResultsToExpectedResults(fakeReportFile, fakeReportFile2)
@@ -180,7 +179,7 @@ class SimpleReportIntegrationTests {
     @Test
     fun `test internal read and write`() {
         val schemaName = "az/pima-az-covid-19"
-        val fakeReportFile = createFakeFile(schemaName, 100, useInternal = true)
+        val fakeReportFile = createFakeCovidFile(schemaName, 100, useInternal = true)
         // Run the data thru its own schema and back out again
         val fakeReportFile2 = readAndWriteInternal(fakeReportFile.absolutePath, schemaName)
         assertThat(FileUtils.contentEquals(fakeReportFile, fakeReportFile2)).isTrue()
@@ -242,7 +241,6 @@ class SimpleReportIntegrationTests {
                         val message = "Patient_ID $expectedKey differed at $header. " +
                             "Expected '$v' but found '${actualLines[i]}'."
                         linesInError.add(message)
-                        println(message)
                     }
                 }
             }

@@ -1,380 +1,63 @@
-import React, { useState } from "react";
-import {
-    Button,
-    Form,
-    FormGroup,
-    Label,
-    FileInput,
-} from "@trussworks/react-uswds";
-import { useResource } from "rest-hooks";
-import { useOktaAuth } from "@okta/okta-react";
-import moment from "moment";
-import { library } from "@fortawesome/fontawesome-svg-core";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faSync } from "@fortawesome/free-solid-svg-icons";
+import { Alert } from "@trussworks/react-uswds";
+import { NavLink } from "react-router-dom";
+import DOMPurify from "dompurify";
+import React from "react";
 
-import { senderClient } from "../webreceiver-utils";
-import SenderOrganizationResource from "../resources/SenderOrganizationResource";
-import { getStoredOrg } from "../components/GlobalContextProvider";
-import { showError } from "../components/AlertNotifications";
+import { MemberType } from "../hooks/UseOktaMemberships";
+import { AuthElement } from "../components/AuthElement";
 
-// values taken from Report.kt
-const PAYLOAD_MAX_BYTES = 50 * 1000 * 1000; // no idea why this isn't in "k" (* 1024).
-const REPORT_MAX_ITEMS = 10000;
-const REPORT_MAX_ITEM_COLUMNS = 2000;
-// const REPORT_MAX_ERRORS = 100;
-
-library.add(faSync);
+const TransitionBanner = () => {
+    return (
+        <Alert
+            type="warning"
+            heading="CSV uploader has moved to SimpleReport"
+            headingLevel="h4"
+        >
+            <ul>
+                <li className="margin-bottom-2">
+                    Starting <b>July 18, 2022</b>, the CSV uploader feature will
+                    no longer be available from the ReportStream web portal.
+                    However, you’ll still have access to your{" "}
+                    <NavLink to="/submissions">CSV submission history</NavLink>{" "}
+                    through your ReportStream user account until further notice.
+                </li>
+                <li className="margin-bottom-2">
+                    Visit the new CSV uploader by{" "}
+                    <a
+                        href="https://www.simplereport.gov/app/results/upload"
+                        className="usa-link"
+                    >
+                        following this link
+                    </a>{" "}
+                    (you can use your existing username and password). If you
+                    need assistance or have questions, please email the
+                    SimpleReport team at{" "}
+                    <a
+                        href={
+                            "mailto:" +
+                            DOMPurify.sanitize("support@simplereport.gov")
+                        }
+                        className="usa-link"
+                    >
+                        support@simplereport.gov
+                    </a>
+                    .
+                </li>
+            </ul>
+        </Alert>
+    );
+};
 
 export const Upload = () => {
-    const { authState } = useOktaAuth();
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [fileInputResetValue, setFileInputResetValue] = useState(0);
-    const [fileContent, setFileContent] = useState("");
-    const [fileName, setFileName] = useState("");
-    const [errors, setErrors] = useState([]);
-    const [destinations, setDestinations] = useState("");
-    const [reportId, setReportId] = useState(null);
-    const [successTimestamp, setSuccessTimestamp] = useState("");
-    const [buttonText, setButtonText] = useState("Upload");
-    const [headerMessage, setHeaderMessage] = useState(
-        "Upload your COVID-19 results"
-    );
-    const [errorMessageText, setErrorMessageText] = useState(
-        `Please resolve the errors below and upload your edited file. Your file has not been accepted.`
-    );
-
-    const client = senderClient(authState);
-    const organization = useResource(SenderOrganizationResource.detail(), {
-        name: getStoredOrg(),
-    });
-
-    const userName = {
-        firstName: authState?.accessToken?.claims.given_name || "",
-        lastName: authState?.accessToken?.claims.family_name || "",
-    };
-
-    const uploadReport = async function postData() {
-        let textBody;
-        let response;
-        try {
-            response = await fetch(
-                `${process.env.REACT_APP_BACKEND_URL}/api/waters`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "text/csv",
-                        client: client, // ignore.ignore-waters
-                        "authentication-type": "okta",
-                        Authorization: `Bearer ${authState?.accessToken?.accessToken}`,
-                        payloadName: fileName, // header Naming-Convention or namingConvention or naming-convention?
-                    },
-                    body: fileContent,
-                }
-            );
-
-            textBody = await response.text();
-
-            // if this JSON.parse fails, the body was most likely an error string from the server
-            return JSON.parse(textBody);
-        } catch (error) {
-            return {
-                ok: false,
-                status: response ? response.status : 500,
-                errors: [
-                    {
-                        details: textBody ? textBody : error,
-                    },
-                ],
-            };
-        }
-    };
-
-    const handleFileChange = async (
-        event: React.ChangeEvent<HTMLInputElement>
-    ) => {
-        try {
-            if (!event?.currentTarget?.files?.length) {
-                // no files selected
-                return;
-            }
-            const file = event.currentTarget.files.item(0);
-            if (!file) {
-                // shouldn't happen but keeps linter happy
-                return;
-            }
-
-            if (file.size > PAYLOAD_MAX_BYTES) {
-                const maxkbytes = (PAYLOAD_MAX_BYTES / 1024).toLocaleString(
-                    "en-US",
-                    { maximumFractionDigits: 2, minimumFractionDigits: 2 }
-                );
-
-                showError(
-                    `The file '${file.name}' is too large. The maximum file size is ${maxkbytes}k`
-                );
-                return;
-            }
-            // load the "contents" of the file. Hope it fits in memory!
-            const filecontent = await file.text();
-
-            // count the number of lines
-            const linecount = (filecontent.match(/\n/g) || []).length + 1;
-            if (linecount > REPORT_MAX_ITEMS) {
-                showError(
-                    `The file '${file.name}' has too many rows. The maximum number of rows allowed is ${REPORT_MAX_ITEMS}.`
-                );
-                return;
-            }
-            if (linecount <= 1) {
-                showError(
-                    `The file '${file.name}' doesn't contain any valid data. ` +
-                        `File should have a header line and at least one line of data.`
-                );
-                return;
-            }
-
-            // get the first line and examine it
-            const firstline = (filecontent.match(/^(.*)\n/) || [""])[0];
-            // ideally, the columns would be comma seperated, but they may be tabs, because the first
-            // line is a header, we don't have to worry about escaped delimitors in strings (e.g. ,"Smith, John",)
-            const columncount =
-                (firstline.match(/,/g) || []).length ||
-                (firstline.match(/\t/g) || []).length;
-
-            if (columncount > REPORT_MAX_ITEM_COLUMNS) {
-                showError(
-                    `The file '${file.name}' has too many columns. The maximum number of allowed columns is ${REPORT_MAX_ITEM_COLUMNS}.`
-                );
-                return;
-            }
-
-            setFileName(file.name);
-            setFileContent(filecontent);
-            // todo: this is a good place to do basic validation of the upload file. e.g. does it have
-            // all the required columns? Are any rows obviously not correct (empty or obviously wrong type)?
-        } catch (err: any) {
-            // todo: have central error reporting mechanism.
-            console.error(err);
-            showError(`An unexpected error happened: '${err.toString()}'`);
-        }
-    };
-
-    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-
-        // reset the state on subsequent uploads
-        setIsSubmitting(true);
-        setReportId(null);
-        setSuccessTimestamp("");
-        setErrors([]);
-        setDestinations("");
-
-        if (fileContent.length === 0) {
-            return;
-        }
-
-        let response;
-        try {
-            response = await uploadReport();
-            if (response?.destinations?.length) {
-                // NOTE: `{ readonly [key: string]: string }` means a key:value object
-                setDestinations(
-                    response.destinations
-                        .map(
-                            (d: { readonly [key: string]: string }) =>
-                                d["organization"]
-                        )
-                        .join(", ")
-                );
-            }
-
-            if (response?.id) {
-                setReportId(response.id);
-                setSuccessTimestamp(response.timestamp);
-                event.currentTarget.reset();
-            }
-
-            if (response?.errors?.length) {
-                // if there is a response status, then there was most likely a server-side error as the json was not parsed
-                setErrorMessageText(
-                    response?.status
-                        ? "There was a server error. Your file has not been accepted."
-                        : "Please resolve the errors below and upload your edited file. Your file has not been accepted."
-                );
-            }
-
-            if (response?.errors?.length > 0) {
-                setErrors(response.errors);
-            }
-
-            setHeaderMessage("Your COVID-19 Results");
-        } catch (error) {
-            if (response?.errors) {
-                setErrors(response.errors);
-            }
-        }
-        setButtonText("Upload another file");
-        // Changing the key to force the FileInput to reset. Otherwise it won't recognize changes to the file's content unless the file name changes
-        setFileInputResetValue(fileInputResetValue + 1);
-        setIsSubmitting(false);
-    };
-
-    const formattedSuccessDate = (format: string) => {
-        const timestampDate = new Date(successTimestamp);
-        return moment(timestampDate).format(format);
-    };
-
-    const timeZoneAbbreviated = () => {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    };
-
     return (
         <div className="grid-container usa-section margin-bottom-10">
-            <span
-                id="orgName"
-                className="text-normal text-base margin-bottom-0"
-            >
-                {userName.firstName} {userName.lastName}
-            </span>
-            <h1 className="margin-top-0 margin-bottom-5">
-                {organization?.description}
-            </h1>
-            <h2 className="font-sans-lg">{headerMessage}</h2>
-            {reportId && (
-                <div>
-                    <div className="usa-alert usa-alert--success">
-                        <div className="usa-alert__body">
-                            <h4 className="usa-alert__heading">
-                                Success: File accepted
-                            </h4>
-                            <p className="usa-alert__text">
-                                Your file has been successfully transmitted to
-                                the department of health.
-                            </p>
-                        </div>
-                    </div>
-                    <div>
-                        <p
-                            id="orgName"
-                            className="text-normal text-base margin-bottom-0"
-                        >
-                            Confirmation Code
-                        </p>
-                        <p className="margin-top-05">{reportId}</p>
-                    </div>
-                    <div>
-                        <p
-                            id="orgName"
-                            className="text-normal text-base margin-bottom-0"
-                        >
-                            Date Received
-                        </p>
-                        <p className="margin-top-05">
-                            {formattedSuccessDate("DD MMMM YYYY")}
-                        </p>
-                    </div>
-
-                    <div>
-                        <p
-                            id="orgName"
-                            className="text-normal text-base margin-bottom-0"
-                        >
-                            Time Received
-                        </p>
-                        <p className="margin-top-05">{`${formattedSuccessDate(
-                            "h:mm"
-                        )} ${timeZoneAbbreviated()}`}</p>
-                    </div>
-                    <div>
-                        <p
-                            id="orgName"
-                            className="text-normal text-base margin-bottom-0"
-                        >
-                            Recipients
-                        </p>
-                        {destinations && (
-                            <p className="margin-top-05">{destinations}</p>
-                        )}
-                        {!destinations && (
-                            <p className="margin-top-05">
-                                There are no known recipients at this time.
-                            </p>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {errors.length > 0 && (
-                <div>
-                    <div className="usa-alert usa-alert--error" role="alert">
-                        <div className="usa-alert__body">
-                            <h4 className="usa-alert__heading">
-                                Error: File not accepted
-                            </h4>
-                            <p className="usa-alert__text">
-                                {errorMessageText}
-                            </p>
-                        </div>
-                    </div>
-                    <table className="usa-table usa-table--borderless">
-                        <thead>
-                            <tr>
-                                <th>Requested Edit</th>
-                                <th>Areas Containing the Requested Edit</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {errors.map((e, i) => {
-                                return (
-                                    <tr key={"error_" + i}>
-                                        <td>{e["message"]}</td>
-                                        <td>{e["itemNums"]}</td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-
-            <Form onSubmit={(e) => handleSubmit(e)}>
-                <FormGroup className="margin-bottom-3">
-                    <Label
-                        className="font-sans-xs"
-                        id="upload-csv-input-label"
-                        htmlFor="upload-csv-input"
-                    >
-                        Upload your COVID-19 lab results as a .CSV.
-                    </Label>
-                    <FileInput
-                        key={fileInputResetValue}
-                        id="upload-csv-input"
-                        name="upload-csv-input"
-                        aria-describedby="upload-csv-input-label"
-                        accept=".csv, text/csv"
-                        onChange={(e) => handleFileChange(e)}
-                        required
-                    />
-                </FormGroup>
-                <Button
-                    type="submit"
-                    disabled={isSubmitting || fileName.length === 0}
-                >
-                    {isSubmitting && (
-                        <span>
-                            <FontAwesomeIcon
-                                icon="sync"
-                                spin
-                                className="margin-right-05"
-                            />
-                            <span>Processing file...</span>
-                        </span>
-                    )}
-
-                    {!isSubmitting && <span>{buttonText}</span>}
-                </Button>
-            </Form>
+            <section className="margin-bottom-4">
+                <TransitionBanner />
+            </section>
         </div>
     );
 };
+
+export const UploadWithAuth = () => (
+    <AuthElement element={<Upload />} requiredUserType={MemberType.SENDER} />
+);

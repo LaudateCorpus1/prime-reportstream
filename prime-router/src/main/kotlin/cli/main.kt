@@ -9,14 +9,19 @@ import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
+import gov.cdc.prime.router.CovidSender
 import gov.cdc.prime.router.CsvComparer
-import gov.cdc.prime.router.DocumentationFactory
 import gov.cdc.prime.router.FileSettings
 import gov.cdc.prime.router.Metadata
 import gov.cdc.prime.router.Schema
 import gov.cdc.prime.router.SettingsProvider
 import gov.cdc.prime.router.Translator
 import gov.cdc.prime.router.cli.tests.TestReportStream
+import gov.cdc.prime.router.docgenerators.CsvDocumentationFactory
+import gov.cdc.prime.router.docgenerators.DocumentationFactory
+import gov.cdc.prime.router.docgenerators.ExcelDocumentationFactory
+import gov.cdc.prime.router.docgenerators.HtmlDocumentationFactory
+import gov.cdc.prime.router.docgenerators.MarkdownDocumentationFactory
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -47,7 +52,7 @@ class ListSchemas : CliktCommand(
         var formatTemplate = "%-18s\t%-10s\t%s"
         println(formatTemplate.format("Organization Name", "Client Name", "Schema Sent to Hub"))
         settings.senders.forEach {
-            println(formatTemplate.format(it.organizationName, it.name, it.schemaName))
+            println(formatTemplate.format(it.organizationName, it.name, if (it is CovidSender) it.schemaName else ""))
         }
         println()
         println("Current Services (Receivers from the Hub)")
@@ -103,11 +108,23 @@ class GenerateDocs : CliktCommand(
         "--mapped-hl7-elements"
     ).flag(default = false)
     private val generateHtml by option(
-        "--generate-html", help = "generate the HTML version of the documentation. Default is not to generate HTML."
+        "--generate-html",
+        help = "generate the HTML version of the documentation. Default is not to generate HTML."
     ).flag("--no-generate-html", default = false)
     private val generateMarkup by option(
-        "--generate-markup", help = "generate the markup version of the documentation.  Default is to generate markup."
+        "--generate-markup",
+        help = "generate the markup version of the documentation.  Default is to generate markup."
     ).flag("--no-generate-markup", default = true)
+    private val generateCsv by option(
+        "--generate-csv",
+        help = "generate the CSV data dictionary version of the documentation. " +
+            "Default is to not generate the CSV data dictionary"
+    ).flag("--no-generate-csv", default = false)
+    private val generateExcel by option(
+        "--generate-xl",
+        help = "generate the Excel version of the data dictionary for the schema. " +
+            "Default is to not generate the Excel data dictionary"
+    ).flag("--no-generate-xl", default = false)
     private val outputFileName by option(
         "--output",
         metavar = "<path>",
@@ -121,11 +138,17 @@ class GenerateDocs : CliktCommand(
     )
         .default(defaultOutputDir)
 
+    /**
+     * Generates schema documentation based on the parameters passed in
+     */
     fun generateSchemaDocumentation(metadata: Metadata) {
-        if (!generateMarkup && !generateHtml) {
-            println("Nothing generated.  You need to specify at least one type of output.")
-            return
-        } else if (inputSchema.isNullOrBlank()) {
+        val docGenerators = mutableListOf<DocumentationFactory>()
+        if (generateHtml) docGenerators.add(HtmlDocumentationFactory)
+        if (generateMarkup) docGenerators.add(MarkdownDocumentationFactory)
+        if (generateCsv) docGenerators.add(CsvDocumentationFactory)
+        if (generateExcel) docGenerators.add(ExcelDocumentationFactory)
+
+        if (inputSchema.isNullOrBlank()) {
             println("Generating documentation for all schemas")
 
             // Clear the existing schema (we want to remove deleted schemas)
@@ -134,14 +157,9 @@ class GenerateDocs : CliktCommand(
             }
 
             metadata.schemas.forEach {
-                DocumentationFactory.writeDocumentationForSchema(
-                    it,
-                    outputDir,
-                    outputFileName,
-                    includeTimestamps,
-                    generateMarkup,
-                    generateHtml
-                )
+                docGenerators.forEach { dg ->
+                    dg.writeDocumentationForSchema(it, outputDir, outputFileName, includeTimestamps)
+                }
                 println(it.name)
             }
         } else {
@@ -157,10 +175,9 @@ class GenerateDocs : CliktCommand(
             if (outputHl7Elements) {
                 schema = buildMappedHl7Schema(schema)
             }
-            DocumentationFactory.writeDocumentationForSchema(
-                schema, outputDir, outputFileName, includeTimestamps,
-                generateMarkup, generateHtml
-            )
+            docGenerators.forEach { dg ->
+                dg.writeDocumentationForSchema(schema, outputDir, outputFileName, includeTimestamps)
+            }
         }
     }
 
@@ -209,7 +226,7 @@ class GenerateDocs : CliktCommand(
         }
         return Schema(
             fromSchema.baseName,
-            "covid-19",
+            fromSchema.topic,
             hl7Elements,
             description = "HL7 data elements resulting from ${fromSchema.baseName}"
         )
@@ -255,7 +272,7 @@ fun main(args: Array<String>) = RouterCli()
     .subcommands(
         ProcessData(),
         ListSchemas(),
-        LivdTableDownload(),
+        LivdTableUpdate(),
         GenerateDocs(),
         CredentialsCli(),
         CompareCsvFiles(),
@@ -271,6 +288,9 @@ fun main(args: Array<String>) = RouterCli()
             LookupTableActivateCommand(), LookupTableDiffCommand(), LookupTableLoadAllCommand()
         ),
         ConvertFileCommands(),
-        SenderFilesCommand()
+        SenderFilesCommand(),
+        ProcessFhirCommands(),
+        FhirPathCommand(),
+        ConvertValuesetsYamlToCSV()
     )
     .main(args)

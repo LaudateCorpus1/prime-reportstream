@@ -1,6 +1,7 @@
 package gov.cdc.prime.router.transport
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -55,6 +56,7 @@ class GAENTransportIntegrationTests : TransportIntegrationTests() {
         1,
         "",
         "",
+        null,
         null,
         null,
         null,
@@ -142,5 +144,6 @@ class GAENTransportIntegrationTests : TransportIntegrationTests() {
 
         assertThat(retryItems).isNull()
         assertThat(actionHistory.action.actionName).isEqualTo(TaskAction.send_error)
+        assertThat(actionHistory.action.actionResult).contains("""errorCode": "invalid_date""")
     }
 }

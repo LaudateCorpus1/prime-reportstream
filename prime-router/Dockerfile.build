@@ -40,7 +40,7 @@ RUN rm Azure.Functions.Cli.linux-x64.${AFCT_VERSION}.zip
 #
 # STAGE 2: Build the actual container that does the build
 #
-FROM debian:buster AS builder
+FROM debian:bullseye AS builder
 ARG JAVA_VERSION=11
 
 # Get the unpacked gradle binaries from the downloader stage
@@ -57,9 +57,9 @@ ENV PATH "${PATH}:/opt/azure-functions/"
 ENV FUNCTIONS_CORE_TOOLS_TELEMETRY_OPTOUT 1
 
 # Install pre-requisites
-RUN apt-get update \
-    && apt-get --yes install \
-    openjdk-${JAVA_VERSION}-jdk
+RUN apt-get clean \
+    && apt-get --allow-releaseinfo-change update \
+    && apt-get --yes install openjdk-${JAVA_VERSION}-jdk
 
 # A place to mount our source
 RUN mkdir -p "/src"

@@ -22,6 +22,8 @@ import gov.cdc.prime.router.Report
 import gov.cdc.prime.router.Schema
 import gov.cdc.prime.router.Sender
 import gov.cdc.prime.router.SettingsProvider
+import gov.cdc.prime.router.Topic
+import gov.cdc.prime.router.TopicSender
 import gov.cdc.prime.router.Translator
 import gov.cdc.prime.router.serializers.CsvSerializer
 import gov.cdc.prime.router.serializers.Hl7Serializer
@@ -49,7 +51,7 @@ sealed class InputClientInfo {
  */
 class ProcessData(
     private val metadataInstance: Metadata? = null,
-    private val fileSettingsInstance: FileSettings? = null
+    private val fileSettingsInstance: FileSettings? = null,
 ) : CliktCommand(
     name = "data",
     help = """
@@ -114,6 +116,12 @@ class ProcessData(
             help = "interpret input according to this client"
         ).convert { InputClientInfo.InputClient(it) }
     ).single()
+
+    private val testFileSettingsInstance by option(
+        "--test-dir-setting",
+        metavar = "<path>",
+        help = "Test organization setting dir"
+    )
 
     // Actions
     private val validate by option(
@@ -211,6 +219,10 @@ class ProcessData(
         "--receiving-facility",
         help = "the receiving facility"
     )
+    private val includeNcesFacilities by option(
+        "--include-nces-facilities",
+        help = "matching zip codes to those in the NCES dataset."
+    ).flag(default = false)
 
     /**
      * A list of generated output files.
@@ -222,7 +234,7 @@ class ProcessData(
         schema: Schema?,
         sender: Sender?,
         settings: SettingsProvider,
-        listOfFiles: String
+        listOfFiles: String,
     ): Report {
         if (listOfFiles.isEmpty()) error("No files to merge.")
         val files = listOfFiles.split(",", " ").filter { it.isNotBlank() }
@@ -233,12 +245,15 @@ class ProcessData(
     }
 
     private fun handleReadResult(result: ReadResult): Report {
-        if (result.errors.isNotEmpty()) {
-            echo(result.errorsToString())
+        /**
+         * Print the action [log].
+         */
+        fun printLog(log: ActionLog) {
+            val itemIndexStr = if (log.index != null) "INDEX=${log.index}, " else ""
+            echo("${log.type}: $itemIndexStr${log.detail.message}")
         }
-        if (result.warnings.isNotEmpty()) {
-            echo(result.warningsToString())
-        }
+        result.actionLogs.errors.forEach { printLog(it) }
+        result.actionLogs.warnings.forEach { printLog(it) }
         return result.report
     }
 
@@ -247,7 +262,7 @@ class ProcessData(
         schema: Schema?,
         sender: Sender?,
         settings: SettingsProvider,
-        fileName: String
+        fileName: String,
     ): Report {
         val schemaName = schema?.name as String
         val file = File(fileName)
@@ -270,8 +285,7 @@ class ProcessData(
                     csvSerializer.readInternal(
                         schema.name,
                         file.inputStream(),
-                        listOf(FileSource(file.nameWithoutExtension)),
-                        useDefaultsForMissing = true
+                        listOf(FileSource(file.nameWithoutExtension))
                     )
                 } else {
                     val result =
@@ -290,7 +304,7 @@ class ProcessData(
     private fun writeReportsToFile(
         reports: List<Pair<Report, Report.Format>>,
         metadata: Metadata,
-        writeBlock: (report: Report, format: Report.Format, outputStream: OutputStream) -> Unit
+        writeBlock: (report: Report, format: Report.Format, outputStream: OutputStream) -> Unit,
     ) {
         if (outputDir == null && outputFileName == null) return
 
@@ -369,7 +383,8 @@ class ProcessData(
     override fun run() {
         // Load the schema and receivers
         val metadata = metadataInstance ?: Metadata.getInstance()
-        val fileSettings = fileSettingsInstance ?: FileSettings(FileSettings.defaultSettingsDirectory)
+        val fileSettings = testFileSettingsInstance?.let { FileSettings(it) }
+            ?: (fileSettingsInstance ?: FileSettings(FileSettings.defaultSettingsDirectory))
         val csvSerializer = CsvSerializer(metadata)
         val hl7Serializer = Hl7Serializer(metadata, fileSettings)
         echo("Loaded schema and receivers")
@@ -377,20 +392,29 @@ class ProcessData(
         val (schema, sender) = when (inputClientInfo) {
             is InputClientInfo.InputClient -> {
                 val clientName = (inputClientInfo as InputClientInfo.InputClient).clientName
-                val sender = fileSettings.findSender(clientName)
-                Pair(
-                    sender?.let {
-                        metadata.findSchema(it.schemaName) ?: error("Schema $clientName is not found")
-                    },
-                    sender
-                )
+                val sender = fileSettings.findSender(clientName) ?: error("Sender $clientName was not found")
+                if (sender is TopicSender) {
+                    Pair(
+                        sender.let {
+                            metadata.findSchema(it.schemaName) ?: error("Schema ${it.schemaName} was not found")
+                        },
+                        sender
+                    )
+                } else {
+                    Pair(
+                        null,
+                        sender
+                    )
+                }
             }
             is InputClientInfo.InputSchema -> {
                 val inputSchema = (inputClientInfo as InputClientInfo.InputSchema).schemaName
                 val schName = inputSchema.lowercase()
-                metadata.findSchema(schName) ?: error("Schema $inputSchema is not found")
+                metadata.findSchema(schName) ?: error("Schema $inputSchema was not found")
                 // Get a random sender name that uses the provided schema, or null if no sender is found.
-                val sender = fileSettings.senders.filter { it.schemaName == schName }.randomOrNull()
+                val sender = fileSettings.senders.filter {
+                    it is TopicSender && it.schemaName == schName
+                }.randomOrNull()
                 Pair(metadata.findSchema(schName), sender)
             }
             else -> {
@@ -418,7 +442,8 @@ class ProcessData(
                     (inputSource as InputSource.FakeSource).count,
                     FileSource("fake"),
                     targetStates,
-                    targetCounties
+                    targetCounties,
+                    includeNcesFacilities
                 )
             }
             else -> {
@@ -500,7 +525,7 @@ class ProcessData(
         if (warnings.size > 0) {
             echo("Problems occurred during translation to output schema:")
             warnings.forEach {
-                echo("${it.scope} ${it.trackingId}: ${it.detail.detailMsg()}")
+                echo("${it.scope} ${it.trackingId}: ${it.detail.message}")
             }
             echo()
         }
@@ -530,7 +555,7 @@ class ProcessData(
                         val destination = Receiver(
                             "emptyReceiver",
                             "emptyOrganization",
-                            "covid-19",
+                            Topic.COVID_19,
                             CustomerStatus.INACTIVE,
                             hl7Configuration
                         )
@@ -541,6 +566,7 @@ class ProcessData(
                     hl7Serializer.write(reportWithTranslation, stream)
                 }
                 Report.Format.HL7_BATCH -> hl7Serializer.writeBatch(report, stream)
+                else -> throw UnsupportedOperationException("Unsupported ${report.bodyFormat}")
             }
         }
     }

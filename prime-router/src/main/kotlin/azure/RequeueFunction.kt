@@ -8,6 +8,10 @@ import com.microsoft.azure.functions.annotation.AuthorizationLevel
 import com.microsoft.azure.functions.annotation.FunctionName
 import com.microsoft.azure.functions.annotation.HttpTrigger
 import gov.cdc.prime.router.azure.db.enums.TaskAction
+import gov.cdc.prime.router.common.StringUtilities.trimToNull
+import gov.cdc.prime.router.tokens.AuthenticatedClaims
+import gov.cdc.prime.router.tokens.OktaAuthentication
+import gov.cdc.prime.router.tokens.PrincipalLevel
 import org.apache.logging.log4j.kotlin.Logging
 import java.util.UUID
 
@@ -17,15 +21,38 @@ import java.util.UUID
 
 class RequeueFunction : Logging {
     @FunctionName("requeue") // devnote:  putting slashes in this (/) breaks it.
-    fun run(
+    @Deprecated(
+        "This uses Azure auth x-functions-key. " +
+            "Left in until new method 'adm/resend' verified in production"
+    )
+    fun requeue(
         @HttpTrigger(
             name = "requeue",
             methods = [HttpMethod.POST],
-            authLevel = AuthorizationLevel.FUNCTION,
+            authLevel = AuthorizationLevel.FUNCTION, // Azure function auth `x-functions-key`
             route = "requeue/send"
         ) request: HttpRequestMessage<String?>
     ): HttpResponseMessage {
         logger.info("Entering requeue/send api")
+        return handleRequest(request, null)
+    }
+
+    @FunctionName("doResendFunction")
+    fun doResendFunction(
+        @HttpTrigger(
+            name = "doResendFunction",
+            methods = [HttpMethod.POST],
+            authLevel = AuthorizationLevel.ANONYMOUS, // NO Azure function auth aka `x-functions-key`
+            route = "adm/resend"
+        ) request: HttpRequestMessage<String?>,
+    ): HttpResponseMessage {
+        logger.info("adm/resend api")
+        return OktaAuthentication(PrincipalLevel.SYSTEM_ADMIN).checkAccess(request) {
+            handleRequest(request, it)
+        }
+    }
+
+    fun handleRequest(request: HttpRequestMessage<String?>, claim: AuthenticatedClaims?): HttpResponseMessage {
         val workflowEngine = WorkflowEngine()
         val actionHistory = ActionHistory(TaskAction.resend)
         actionHistory.trackActionParams(request)
@@ -33,10 +60,13 @@ class RequeueFunction : Logging {
         val response = try {
             doResend(request, workflowEngine, msgs)
         } catch (t: Throwable) {
-            msgs.add(t.cause?.let { "${t.cause!!.localizedMessage}\n" } ?: "" + t.localizedMessage)
+            msgs.add(t.cause?.let { "${t.cause!!.localizedMessage}\n" } ?: ("" + t.localizedMessage))
             HttpUtilities.bad(request, msgs.joinToString("\n") + "\n")
         }
-        actionHistory.trackActionResult(response)
+        actionHistory.trackActionResult(response.status, response.body.toString())
+        if (claim !== null && claim.userName.trimToNull() !== null) {
+            actionHistory.trackUsername(claim.userName)
+        }
         workflowEngine.recordAction(actionHistory)
         return response
     }
