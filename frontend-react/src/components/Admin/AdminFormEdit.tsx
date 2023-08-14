@@ -93,7 +93,7 @@ export const TextAreaComponent = (params: {
                             params.savefunc(JSON.parse(text));
                         } else {
                             showError(
-                                `JSON data generated an error "${errorMsg}"`
+                                `JSON data generated an error "${errorMsg}"`,
                             );
                         }
                     }}
@@ -116,7 +116,7 @@ export const CheckboxComponent = (params: {
             <Grid col={3}>
                 <Label htmlFor={params.fieldname}>{params.label}:</Label>
             </Grid>
-            <Grid col={9}>
+            <Grid col={9} className={"padding-top-1"}>
                 <Checkbox
                     id={key}
                     name={key}
