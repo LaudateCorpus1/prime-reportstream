@@ -32,15 +32,15 @@ import java.util.Properties
 plugins {
     kotlin("jvm") version "1.8.22"
     id("org.flywaydb.flyway") version "8.5.13"
-    id("nu.studer.jooq") version "7.1.1"
+    id("nu.studer.jooq") version "8.2.1"
     id("com.github.johnrengelman.shadow") version "7.1.2"
     id("com.microsoft.azure.azurefunctions") version "1.11.1"
     id("org.jlleitschuh.gradle.ktlint") version "11.4.2"
     id("com.adarshr.test-logger") version "3.2.0"
     id("jacoco")
     id("org.jetbrains.dokka") version "1.8.20"
-    id("com.avast.gradle.docker-compose") version "0.16.12"
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.0"
+    id("com.avast.gradle.docker-compose") version "0.17.4"
     id("com.nocwriter.runsql") version ("1.0.3")
     id("io.swagger.core.v3.swagger-gradle-plugin") version "2.2.15"
 }
@@ -759,7 +759,7 @@ buildscript {
     dependencies {
         // Now force the gradle build script to get the proper library for com.nimbusds:oauth2-oidc-sdk:9.15.  This
         // will need to be removed once this issue is resolved in Maven.
-        classpath("net.minidev:json-smart:2.4.11")
+        classpath("net.minidev:json-smart:2.5.0")
     }
 }
 
@@ -799,9 +799,9 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-core:[2.17.1,)")
     implementation("org.apache.logging.log4j:log4j-slf4j-impl:[2.17.1,)")
     implementation("org.apache.logging.log4j:log4j-api-kotlin:1.2.0")
-    implementation("com.github.doyaaaaaken:kotlin-csv-jvm:1.9.1")
+    implementation("com.github.doyaaaaaken:kotlin-csv-jvm:1.9.2")
     implementation("tech.tablesaw:tablesaw-core:0.43.1")
-    implementation("com.github.ajalt.clikt:clikt-jvm:3.5.4")
+    implementation("com.github.ajalt.clikt:clikt-jvm:4.2.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:$jacksonVersion")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:$jacksonVersion")
     implementation("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
@@ -811,7 +811,7 @@ dependencies {
     }
     implementation("org.yaml:snakeyaml:2.0")
     implementation("io.github.linuxforhealth:hl7v2-fhir-converter:1.0.19")
-    implementation("ca.uhn.hapi.fhir:hapi-fhir-structures-r4:6.4.0")
+    implementation("ca.uhn.hapi.fhir:hapi-fhir-structures-r4:6.6.2")
     implementation("ca.uhn.hapi:hapi-base:2.3")
     implementation("ca.uhn.hapi:hapi-structures-v251:2.3")
     implementation("com.googlecode.libphonenumber:libphonenumber:8.13.17")
@@ -834,7 +834,7 @@ dependencies {
     implementation("commons-io:commons-io:2.13.0")
     implementation("org.postgresql:postgresql:42.6.0")
     implementation("com.zaxxer:HikariCP:5.0.1")
-    implementation("org.flywaydb:flyway-core:9.7.0")
+    implementation("org.flywaydb:flyway-core:9.21.1")
     implementation("org.commonmark:commonmark:0.21.0")
     implementation("com.google.guava:guava:32.1.1-jre")
     implementation("com.helger.as2:as2-lib:5.1.1")
@@ -888,9 +888,9 @@ dependencies {
     // kotlinx-coroutines-core is needed by mock-fuel
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     testImplementation("com.github.KennethWussmann:mock-fuel:1.3.0")
-    testImplementation("io.mockk:mockk:1.13.5")
+    testImplementation("io.mockk:mockk:1.13.7")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.0")
-    testImplementation("com.willowtreeapps.assertk:assertk-jvm:0.25")
+    testImplementation("com.willowtreeapps.assertk:assertk-jvm:0.26.1")
     testImplementation("io.ktor:ktor-client-mock:$ktorVersion")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
