@@ -33,7 +33,7 @@ plugins {
     kotlin("jvm") version "1.8.22"
     id("org.flywaydb.flyway") version "8.5.13"
     id("nu.studer.jooq") version "7.1.1"
-    id("com.github.johnrengelman.shadow") version "7.1.2"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
     id("com.microsoft.azure.azurefunctions") version "1.11.1"
     id("org.jlleitschuh.gradle.ktlint") version "11.4.2"
     id("com.adarshr.test-logger") version "3.2.0"
