@@ -30,8 +30,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Properties
 
 plugins {
+    id("org.flywaydb.flyway") version "9.21.1"
     kotlin("jvm") version "1.9.0"
-    id("org.flywaydb.flyway") version "8.5.13"
     id("nu.studer.jooq") version "8.2.1"
     id("com.github.johnrengelman.shadow") version "7.1.2"
     id("com.microsoft.azure.azurefunctions") version "1.13.0"
