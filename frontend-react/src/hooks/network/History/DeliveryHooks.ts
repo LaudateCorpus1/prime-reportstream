@@ -1,7 +1,10 @@
 import { useCallback, useMemo } from "react";
 import { AccessToken } from "@okta/okta-auth-js";
 
-import { useAdminSafeOrganizationName } from "../../UseAdminSafeOrganizationName";
+import {
+    Organizations,
+    useAdminSafeOrganizationName,
+} from "../../UseAdminSafeOrganizationName";
 import { useAuthorizedFetch } from "../../../contexts/AuthorizedFetchContext";
 import {
     deliveriesEndpoints,
@@ -23,7 +26,7 @@ export enum DeliveriesDataAttr {
     BATCH_READY = "batchReadyAt",
     EXPIRES = "expires",
     ITEM_COUNT = "reportItemCount",
-    FILE_TYPE = "fileType",
+    FILE_NAME = "fileName",
 }
 
 const filterManagerDefaults: FilterManagerDefaults = {
@@ -47,15 +50,15 @@ const useOrgDeliveries = (service?: string) => {
     // endlessly.
     const generateFetcher = useCreateFetch(
         oktaToken as AccessToken,
-        activeMembership as MembershipSettings
+        activeMembership as MembershipSettings,
     );
 
     const adminSafeOrgName = useAdminSafeOrganizationName(
-        activeMembership?.parsedName
+        activeMembership?.parsedName,
     ); // "PrimeAdmins" -> "ignore"
     const orgAndService = useMemo(
         () => `${adminSafeOrgName}.${service}`,
-        [adminSafeOrgName, service]
+        [adminSafeOrgName, service],
     );
 
     const filterManager = useFilterManager(filterManagerDefaults);
@@ -65,6 +68,11 @@ const useOrgDeliveries = (service?: string) => {
 
     const fetchResults = useCallback(
         (currentCursor: string, numResults: number) => {
+            // HACK: return empty results if requesting as an admin
+            if (activeMembership?.parsedName === Organizations.PRIMEADMINS) {
+                return Promise.resolve<RSDelivery[]>([]);
+            }
+
             const fetcher = generateFetcher();
             return fetcher(getOrgDeliveries, {
                 segments: {
@@ -79,7 +87,14 @@ const useOrgDeliveries = (service?: string) => {
                 },
             }) as unknown as Promise<RSDelivery[]>;
         },
-        [orgAndService, sortOrder, generateFetcher, rangeFrom, rangeTo]
+        [
+            orgAndService,
+            sortOrder,
+            generateFetcher,
+            rangeFrom,
+            rangeTo,
+            activeMembership?.parsedName,
+        ],
     );
 
     return { fetchResults, filterManager };
@@ -98,14 +113,14 @@ const useReportsDetail = (id: string) => {
                     id: id,
                 },
             }),
-        [authorizedFetch, id]
+        [authorizedFetch, id],
     );
     const { data } = rsUseQuery(
         // sets key with orgAndService so multiple queries can be cached when viewing multiple detail pages
         // during use
         [getDeliveryDetails.queryKey, id],
         memoizedDataFetch,
-        { enabled: !!id }
+        { enabled: !!id },
     );
     return { reportDetail: data };
 };
@@ -123,14 +138,14 @@ const useReportsFacilities = (id: string) => {
                     id: id,
                 },
             }),
-        [authorizedFetch, id]
+        [authorizedFetch, id],
     );
     const { data } = rsUseQuery(
         // sets key with orgAndService so multiple queries can be cached when viewing multiple detail pages
         // during use
         [getDeliveryFacilities.queryKey, id],
         memoizedDataFetch,
-        { enabled: !!id }
+        { enabled: !!id },
     );
     return { reportFacilities: data };
 };

@@ -1,6 +1,7 @@
-import { renderHook } from "@testing-library/react-hooks";
+import { renderHook } from "@testing-library/react";
 import * as axios from "axios";
 
+import config from "../config";
 import { RSEndpoint } from "../config/endpoints";
 import { mockToken } from "../utils/TestUtils";
 
@@ -35,7 +36,7 @@ describe("useCreateFetch", () => {
     beforeEach(() => {
         generatorSpy = jest.spyOn(
             UseCreateFetch.auxExports,
-            "createTypeWrapperForAuthorizedFetch"
+            "createTypeWrapperForAuthorizedFetch",
         );
     });
     afterAll(() => {
@@ -49,7 +50,7 @@ describe("useCreateFetch", () => {
             memberType: MemberType.SENDER,
         };
         const { result } = renderHook(() =>
-            UseCreateFetch.useCreateFetch(fakeOktaToken, fakeMembership)
+            UseCreateFetch.useCreateFetch(fakeOktaToken, fakeMembership),
         );
         expect(result.current).toBeInstanceOf(Function);
         expect(generatorSpy).not.toHaveBeenCalled();
@@ -67,14 +68,14 @@ describe("createTypeWrapperForAuthorizedFetch", () => {
 
     beforeEach(() => {
         mockedAxios.default.mockImplementation(
-            () => Promise.resolve({ data: "any data" }) as axios.AxiosPromise
+            () => Promise.resolve({ data: "any data" }) as axios.AxiosPromise,
         );
     });
 
     test("returns an async function", () => {
         const authorizedFetch = createTypeWrapperForAuthorizedFetch(
             fakeOktaToken,
-            fakeMembership
+            fakeMembership,
         );
         const authorizedFetchResult = authorizedFetch(fakeEndpoint);
         expect(authorizedFetchResult).toBeInstanceOf(Promise);
@@ -83,14 +84,14 @@ describe("createTypeWrapperForAuthorizedFetch", () => {
     test("returns a function that returns a function that calls axios with expected arguments", async () => {
         await createTypeWrapperForAuthorizedFetch(
             mockToken({ accessToken: "this token" }),
-            fakeMembership
+            fakeMembership,
         )(fakeEndpoint, {
             data: "some data",
             timeout: 1,
         });
         expect(axios).toHaveBeenCalledTimes(1);
         expect(axios).toHaveBeenCalledWith({
-            url: "https://test.prime.cdc.gov/api/anything",
+            url: `${config.API_ROOT}/anything`,
             method: "GET",
             data: "some data",
             timeout: 1,
@@ -106,7 +107,7 @@ describe("createTypeWrapperForAuthorizedFetch", () => {
     test("returns a function that returns a function that calls axios with expected arguments (custom headers)", async () => {
         await createTypeWrapperForAuthorizedFetch(
             mockToken({ accessToken: "this token" }),
-            fakeMembership
+            fakeMembership,
         )(fakeEndpoint, {
             data: "some data",
             timeout: 1,
@@ -117,7 +118,7 @@ describe("createTypeWrapperForAuthorizedFetch", () => {
         });
         expect(axios).toHaveBeenCalledTimes(1);
         expect(axios).toHaveBeenCalledWith({
-            url: "https://test.prime.cdc.gov/api/anything",
+            url: `${config.API_ROOT}/anything`,
             method: "GET",
             data: "some data",
             timeout: 1,
@@ -134,7 +135,7 @@ describe("createTypeWrapperForAuthorizedFetch", () => {
     test("returns a function that returns a function that calls axios with expected arguments and does not override key options", async () => {
         await createTypeWrapperForAuthorizedFetch(
             mockToken({ accessToken: "this token" }),
-            fakeMembership
+            fakeMembership,
         )(fakeEndpoint, {
             url: "do not use me",
             method: "POST",
@@ -143,7 +144,7 @@ describe("createTypeWrapperForAuthorizedFetch", () => {
         });
         expect(axios).toHaveBeenCalledTimes(1);
         expect(axios).toHaveBeenCalledWith({
-            url: "https://test.prime.cdc.gov/api/anything",
+            url: `${config.API_ROOT}/anything`,
             method: "GET",
             data: "some data",
             timeout: 1,
@@ -159,7 +160,7 @@ describe("createTypeWrapperForAuthorizedFetch", () => {
     test("returns a function that returns a function that returns the data object from axios response", async () => {
         const dataResult = await createTypeWrapperForAuthorizedFetch(
             mockToken({ accessToken: "this token" }),
-            fakeMembership
+            fakeMembership,
         )(fakeEndpoint, {
             data: "some data",
             timeout: 1,
