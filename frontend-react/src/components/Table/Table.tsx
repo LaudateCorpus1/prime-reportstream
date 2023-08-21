@@ -11,12 +11,15 @@ import { DatasetAction, TableInfo } from "./TableInfo";
 export interface ActionableColumn {
     action: Function;
     param?: string;
+    actionButtonHandler?: Function;
+    actionButtonParam?: string;
 }
 
 export interface LinkableColumn {
     link: boolean;
     linkBasePath?: string;
     linkAttr?: string; // if no linkAttr is given, defaults to dataAttr
+    linkState?: unknown;
 }
 
 /** @alias for any type of feature column */
@@ -107,7 +110,7 @@ const Table = ({
                     return config.rows.sort((a, b) =>
                         localOrder === "ASC"
                             ? a[column].localeCompare(b[column])
-                            : b[column].localeCompare(a[column])
+                            : b[column].localeCompare(a[column]),
                     );
                 }
                 case "bigint":
@@ -115,7 +118,7 @@ const Table = ({
                     return config.rows.sort((a, b) =>
                         localOrder === "ASC"
                             ? a[column] - b[column]
-                            : b[column] - a[column]
+                            : b[column] - a[column],
                     );
                 }
             }
@@ -123,10 +126,7 @@ const Table = ({
         return config.rows;
     }, [config.rows, filterManager?.sortSettings]);
 
-    const wrapperClasses = useMemo(
-        () => `grid-container margin-bottom-10 ${classes}`,
-        [classes]
-    );
+    const wrapperClasses = `margin-bottom-10 ${classes}`;
 
     const addRow = useCallback(() => {
         setRowToEdit(memoizedRows?.length || 0);
@@ -153,7 +153,7 @@ const Table = ({
                 datasetAction={memoizedDatasetAction}
                 rowToEdit={rowToEdit}
             />
-            <div className="grid-col-12">
+            <div>
                 <table
                     className="usa-table usa-table--borderless usa-table--striped prime-table"
                     aria-label="Submission history from the last 30 days"

@@ -1,0 +1,47 @@
+elements:
+  - name: identifier-code
+    value: [ '%resource.coding[0].code' ]
+    hl7Spec: [ '%{cweFieldPath}-1' ]
+  - name: identifier-display
+    value: [ '%resource.coding[0].display' ]
+    hl7Spec: [ '%{cweFieldPath}-2' ]
+  - name: identifier-system-url
+    resource: '%resource.coding[0].system'
+    condition: '%resource.value.startsWith("http")'
+    value: [ '%resource.getCodingSystemMapping()' ]
+    hl7Spec: [ '%{cweFieldPath}-3' ]
+  - name: identifier-system
+    resource: '%resource.coding[0].system'
+    condition: '%resource.value.startsWith("http").not()'
+    value: [ '%resource.value' ]
+    hl7Spec: [ '%{cweFieldPath}-3' ]
+  - name: identifier-version
+    value: [ '%resource.coding[0].version' ]
+    hl7Spec: [ '%{cweFieldPath}-7' ]
+
+  - name: alt-identifier-code
+    value: [ '%resource.coding[1].code' ]
+    hl7Spec: [ '%{cweFieldPath}-4' ]
+  - name: alt-identifier-display
+    value: [ '%resource.coding[1].display' ]
+    hl7Spec: [ '%{cweFieldPath}-5' ]
+  - name: alt-identifier-system
+    value: [ '%resource.coding[1].system' ]
+    hl7Spec: [ '%{cweFieldPath}-6' ]
+  - name: alt-identifier-system-url
+    resource: '%resource.coding[1].system'
+    condition: '%resource.value.startsWith("http")'
+    value: [ '%resource.getCodingSystemMapping()' ]
+    hl7Spec: [ '%{cweFieldPath}-6' ]
+  - name: alt-identifier-system
+    resource: '%resource.coding[1].system'
+    condition: '%resource.value.startsWith("http").not()'
+    value: [ '%resource.value' ]
+    hl7Spec: [ '%{cweFieldPath}-6' ]
+  - name: alt-identifier-version
+    value: [ '%resource.coding[1].version' ]
+    hl7Spec: [ '%{cweFieldPath}-8' ]
+
+  - name: original-text
+    value: [ '%resource.text' ]
+    hl7Spec: [ '%{cweFieldPath}-9' ]
