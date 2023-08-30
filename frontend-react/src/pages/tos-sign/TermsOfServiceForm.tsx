@@ -10,13 +10,13 @@ import {
     TextInput,
 } from "@trussworks/react-uswds";
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 
 import Title from "../../components/Title";
 import getStateTerritoryList from "../../utils/StateTerritories";
 import config from "../../config";
-import { BasicHelmet } from "../../components/header/BasicHelmet";
 import { getAppInsightsHeaders } from "../../TelemetryService";
+import { USLink } from "../../components/USLink";
 
 import SuccessPage from "./SuccessPage";
 
@@ -185,9 +185,9 @@ function TermsOfServiceForm() {
         return (
             <span className="maxw-2">
                 I have read and agree to the ReportSteam{" "}
-                <Link to="/terms-of-service" target="_blank" rel="noopener">
+                <USLink href="/terms-of-service" target="_blank" rel="noopener">
                     terms of service
-                </Link>
+                </USLink>
                 . <Required />
             </span>
         );
@@ -221,7 +221,9 @@ function TermsOfServiceForm() {
         <SuccessPage data={createBody()} />
     ) : (
         <>
-            <BasicHelmet pageTitle="Sign the Terms of Service" />
+            <Helmet>
+                <title>Sign the Terms of Service</title>
+            </Helmet>
             <div
                 data-testid="form-container"
                 className="grid-container tablet:grid-col-6 margin-x-auto"
@@ -256,7 +258,7 @@ function TermsOfServiceForm() {
                                 value={title}
                                 maxLength={255}
                                 onChange={(
-                                    e: React.ChangeEvent<HTMLInputElement>
+                                    e: React.ChangeEvent<HTMLInputElement>,
                                 ) => setTitle(e.target.value)}
                             />
                         </FormGroup>
@@ -273,7 +275,7 @@ function TermsOfServiceForm() {
                                 value={firstName}
                                 maxLength={255}
                                 onChange={(
-                                    e: React.ChangeEvent<HTMLInputElement>
+                                    e: React.ChangeEvent<HTMLInputElement>,
                                 ) => setFirstName(e.target.value)}
                             />
                             <ErrorMessageWithFlag
@@ -294,7 +296,7 @@ function TermsOfServiceForm() {
                                 value={lastName}
                                 maxLength={255}
                                 onChange={(
-                                    e: React.ChangeEvent<HTMLInputElement>
+                                    e: React.ChangeEvent<HTMLInputElement>,
                                 ) => setLastName(e.target.value)}
                             />
                             <ErrorMessageWithFlag
@@ -315,7 +317,7 @@ function TermsOfServiceForm() {
                                 value={email}
                                 maxLength={255}
                                 onChange={(
-                                    e: React.ChangeEvent<HTMLInputElement>
+                                    e: React.ChangeEvent<HTMLInputElement>,
                                 ) => setEmail(e.target.value)}
                             />
                             <ErrorMessageWithFlag
@@ -342,7 +344,7 @@ function TermsOfServiceForm() {
                                 value={organizationName}
                                 maxLength={255}
                                 onChange={(
-                                    e: React.ChangeEvent<HTMLInputElement>
+                                    e: React.ChangeEvent<HTMLInputElement>,
                                 ) => setOrganizationName(e.target.value)}
                             />
                             <ErrorMessageWithFlag
@@ -360,7 +362,7 @@ function TermsOfServiceForm() {
                                 name="states-dropdown"
                                 value={territory}
                                 onChange={(
-                                    e: React.ChangeEvent<HTMLSelectElement>
+                                    e: React.ChangeEvent<HTMLSelectElement>,
                                 ) => setTerritory(e.target.value)}
                             >
                                 {STATES.map((state) => {
@@ -387,7 +389,7 @@ function TermsOfServiceForm() {
                             name="multi-state"
                             label="My organization operates in multiple states"
                             onChange={(
-                                e: React.ChangeEvent<HTMLInputElement>
+                                e: React.ChangeEvent<HTMLInputElement>,
                             ) => setMultipleStates(e.target.checked)}
                         />
                     </fieldset>
@@ -401,7 +403,7 @@ function TermsOfServiceForm() {
                                 data-testid="agree"
                                 name="agree"
                                 onChange={(
-                                    e: React.ChangeEvent<HTMLInputElement>
+                                    e: React.ChangeEvent<HTMLInputElement>,
                                 ) => setAgree(e.target.checked)}
                                 label={<AgreementLabel />}
                             />
@@ -431,6 +433,7 @@ function TermsOfServiceForm() {
                         Submit registration
                     </Button>
                     <Alert
+                        headingLevel="h4"
                         style={{
                             visibility: sendGridErrorFlag.isError
                                 ? "visible"
