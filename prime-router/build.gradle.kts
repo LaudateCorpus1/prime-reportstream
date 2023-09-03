@@ -38,7 +38,7 @@ plugins {
     id("com.microsoft.azure.azurefunctions") version "1.13.0"
     id("com.adarshr.test-logger") version "3.2.0"
     id("jacoco")
-    id("org.jetbrains.dokka") version "1.8.20"
+    id("org.jetbrains.dokka") version "1.9.0"
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.0"
     id("com.avast.gradle.docker-compose") version "0.17.4"
     id("com.nocwriter.runsql") version ("1.0.3")
