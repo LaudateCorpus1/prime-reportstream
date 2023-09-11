@@ -1,7 +1,8 @@
 import React, { Suspense, useRef, useState } from "react";
 import { NetworkErrorBoundary, useController, useResource } from "rest-hooks";
 import { Button, Grid, GridContainer } from "@trussworks/react-uswds";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 
 import HipaaNotice from "../../components/HipaaNotice";
 import Spinner from "../../components/Spinner";
@@ -37,9 +38,9 @@ import { ObjectTooltip } from "../../components/tooltips/ObjectTooltip";
 import { SampleFilterObject } from "../../utils/TemporarySettingsAPITypes";
 import { AuthElement } from "../../components/AuthElement";
 import { MemberType } from "../../hooks/UseOktaMemberships";
-import { BasicHelmet } from "../../components/header/BasicHelmet";
 import config from "../../config";
 import { getAppInsightsHeaders } from "../../TelemetryService";
+import { USLink } from "../../components/USLink";
 
 const { RS_API_URL } = config;
 
@@ -52,7 +53,7 @@ export function AdminOrgEdit() {
 
     const orgSettings: OrgSettingsResource = useResource(
         OrgSettingsResource.detail(),
-        { orgname: orgname }
+        { orgname: orgname },
     );
     const confirmModalRef = useRef<ConfirmSaveSettingModalRef>(null);
 
@@ -73,7 +74,7 @@ export function AdminOrgEdit() {
                     Authorization: `Bearer ${accessToken}`,
                     Organization: organization!,
                 },
-            }
+            },
         );
 
         return await response.json();
@@ -85,16 +86,16 @@ export function AdminOrgEdit() {
             setLoading(true);
             const latestResponse = await getLatestOrgResponse();
             setOrgSettingsOldJson(
-                JSON.stringify(latestResponse, jsonSortReplacer, 2)
+                JSON.stringify(latestResponse, jsonSortReplacer, 2),
             );
             setOrgSettingsNewJson(
-                JSON.stringify(orgSettings, jsonSortReplacer, 2)
+                JSON.stringify(orgSettings, jsonSortReplacer, 2),
             );
 
             if (latestResponse?.version !== orgSettings?.version) {
                 showError(getVersionWarning(VersionWarningType.POPUP));
                 confirmModalRef?.current?.setWarning(
-                    getVersionWarning(VersionWarningType.FULL, latestResponse)
+                    getVersionWarning(VersionWarningType.FULL, latestResponse),
                 );
                 confirmModalRef?.current?.disableSave();
             }
@@ -116,11 +117,11 @@ export function AdminOrgEdit() {
             if (latestResponse.version !== orgSettings?.version) {
                 // refresh left-side panel in compare modal to make it obvious what has changed
                 setOrgSettingsOldJson(
-                    JSON.stringify(latestResponse, jsonSortReplacer, 2)
+                    JSON.stringify(latestResponse, jsonSortReplacer, 2),
                 );
                 showError(getVersionWarning(VersionWarningType.POPUP));
                 confirmModalRef?.current?.setWarning(
-                    getVersionWarning(VersionWarningType.FULL, latestResponse)
+                    getVersionWarning(VersionWarningType.FULL, latestResponse),
                 );
                 confirmModalRef?.current?.disableSave();
                 return false;
@@ -131,11 +132,11 @@ export function AdminOrgEdit() {
             await fetchController(
                 OrgSettingsResource.update(),
                 { orgname },
-                data
+                data,
             );
             showAlertNotification(
                 "success",
-                `Item '${orgname}' has been updated`
+                `Item '${orgname}' has been updated`,
             );
             confirmModalRef?.current?.hideModal();
             showAlertNotification("success", `Saved '${orgname}' setting.`);
@@ -154,15 +155,17 @@ export function AdminOrgEdit() {
         <NetworkErrorBoundary
             fallbackComponent={() => <ErrorPage type="page" />}
         >
-            <BasicHelmet pageTitle="Admin | Org Edit" />
+            <Helmet>
+                <title>Admin | Org Edit</title>
+            </Helmet>
             <section className="grid-container margin-top-3 margin-bottom-5">
                 <h2>
                     Org name: {orgname} {" - "}
-                    <Link
-                        to={`/admin/revisionhistory/org/${orgname}/settingtype/organization`}
+                    <USLink
+                        href={`/admin/revisionhistory/org/${orgname}/settingtype/organization`}
                     >
                         History
-                    </Link>
+                    </USLink>
                 </h2>
             </section>
             <NetworkErrorBoundary
