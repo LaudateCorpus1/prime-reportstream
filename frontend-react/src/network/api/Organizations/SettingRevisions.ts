@@ -33,15 +33,15 @@ const settingRevisionEndpoints: RSApiEndpoints = {
 
 /** actual fetching component **/
 export const useSettingRevisionEndpointsQuery = (
-    params: SettingRevisionParams
+    params: SettingRevisionParams,
 ) => {
     const { authorizedFetch, rsUseQuery } =
         useAuthorizedFetch<SettingRevision[]>();
 
     // get all lookup tables in order to get metadata
-    return rsUseQuery(["org", "settingType"], async () =>
+    return rsUseQuery(["history", params.org, params.settingType], async () =>
         authorizedFetch(settingRevisionEndpoints.getList, {
             segments: params,
-        })
+        }),
     );
 };
