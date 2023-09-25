@@ -9,9 +9,7 @@ import com.github.kittinunf.result.Result
 import com.microsoft.azure.functions.HttpStatus
 import gov.cdc.prime.router.ReportId
 import gov.cdc.prime.router.azure.HttpUtilities
-import gov.cdc.prime.router.cli.CommandUtilities.Companion.abort
 import gov.cdc.prime.router.cli.FileUtilities
-import gov.cdc.prime.router.cli.OktaCommand
 import gov.cdc.prime.router.common.Environment
 import gov.cdc.prime.router.history.DetailedSubmissionHistory
 import java.net.HttpURLConnection
@@ -63,6 +61,7 @@ data class HistoryApiTestCase(
     val expectedReports: Set<ReportId>,
     val jsonResponseChecker: HistoryJsonResponseChecker,
     val doMinimalChecking: Boolean,
+    val extraCheck: ((Array<ExpectedSubmissionList>) -> String?)? = null
 )
 
 class HistoryApiTest : CoolTest() {
@@ -70,28 +69,9 @@ class HistoryApiTest : CoolTest() {
     override val description = "Test the History/Lineage API"
     override val status = TestStatus.SMOKE
 
-    // todo this code was copied from oktaAccessToken in SettingCommands.kt
-    // This is now copied in 3 places:  here, SettingCommands, LookupTableCommands, in 3 different ways.
-    // Best style is the lazy init in SettingCommands.  To factor up we need to pass Environment to
-    // CoolTest constructor.  This is a lotta work.
-    /**
-     * The access token left by a previous login command as specified by the command line parameters
-     */
-    fun getAccessToken(environment: Environment): String {
-        return if (environment.oktaApp == null) {
-            "dummy"
-        } else {
-            OktaCommand.fetchAccessToken(environment.oktaApp)
-                ?: abort(
-                    "Cannot run test $name.  Invalid access token. " +
-                        "Run ./prime login to fetch/refresh a PrimeAdmin access token for the $environment environment."
-                )
-        }
-    }
-
     /**
      * Create some fake history, so we have something to query for.
-     * @return null on failure.  Otherwise returns the list of ReportIds created.
+     * @return null on failure. Otherwise returns the list of ReportIds created.
      */
     private fun submitTestData(environment: Environment, options: CoolTestOptions): Set<ReportId>? {
         val receivers = listOf(csvReceiver)
@@ -101,7 +81,7 @@ class HistoryApiTest : CoolTest() {
         val file = FileUtilities.createFakeCovidFile(
             metadata,
             settings,
-            historyTestSender,
+            historyTestSender.schemaName,
             fakeItemCount,
             receivingStates,
             counties,
@@ -174,7 +154,7 @@ class HistoryApiTest : CoolTest() {
      */
     override suspend fun run(environment: Environment, options: CoolTestOptions): Boolean {
         ugly("Starting $name Test: get submission history ")
-        val bearer = getAccessToken(environment)
+        val bearer = OktaAuthTests.getOktaAccessToken(environment, name)
 
         val reportIds = submitTestData(environment, options)
             ?: return bad("*** $name TEST FAILED:  Unable to submit test data")
@@ -202,6 +182,53 @@ class HistoryApiTest : CoolTest() {
                 SubmissionListChecker(this),
                 doMinimalChecking = true,
             ),
+            HistoryApiTestCase(
+                "no such sender",
+                "${environment.url}/api/waters/org/$historyTestOrgName.gobblegobble/submissions",
+                emptyMap(),
+                listOf("pagesize" to options.submits),
+                bearer,
+                HttpStatus.NOT_FOUND,
+                expectedReports = emptySet(),
+                SubmissionListChecker(this),
+                doMinimalChecking = true,
+            ),
+            HistoryApiTestCase(
+                "single sender",
+                "${environment.url}/api/waters/org/$org1Name.$fullELRSenderName/submissions",
+                emptyMap(),
+                listOf("pagesize" to options.submits),
+                bearer,
+                HttpStatus.OK,
+                expectedReports = reportIds,
+                SubmissionListChecker(this),
+                doMinimalChecking = true,
+                extraCheck = {
+                    var retVal: String? = null
+                    for (submission in it) {
+                        if (submission.sender != "$org1Name.$fullELRSenderName")
+                            retVal = "Mismatched sender"
+                    }
+                    retVal
+                }
+            ),
+            HistoryApiTestCase(
+                "all senders",
+                "${environment.url}/api/waters/org/$org1Name/submissions",
+                emptyMap(),
+                listOf("pagesize" to options.submits),
+                bearer,
+                HttpStatus.OK,
+                expectedReports = reportIds,
+                SubmissionListChecker(this),
+                doMinimalChecking = true,
+                extraCheck = {
+                    var retVal: String? = null
+                    if (it.map { it.sender }.toSet().size == 1)
+                        retVal = "Only one sender channel returned"
+                    retVal
+                }
+            )
         )
         if (environment != Environment.LOCAL) {
             testCases.add(
@@ -288,6 +315,12 @@ class SubmissionListChecker(testBeingRun: CoolTest) : HistoryJsonResponseChecker
                         "These ReportIds are missing from the history: ${missingReportIds.joinToString(",")}"
                 )
             }
+        }
+        val checkResult = testCase.extraCheck?.invoke(submissionsHistories)
+        if (checkResult != null) {
+            return testBeingRun.bad(
+                "*** ${testBeingRun.name}: TEST '${testCase.name}' FAILED: $checkResult"
+            )
         }
         return true
     }
