@@ -826,7 +826,7 @@ dependencies {
     // DO NOT INCREMENT SSHJ to a newer version without first thoroughly testing it locally.
     implementation("com.hierynomus:sshj:0.35.0")
     implementation("com.jcraft:jsch:0.1.55")
-    implementation("org.apache.poi:poi:5.2.3")
+    implementation("org.apache.poi:poi:5.2.4")
     implementation("org.apache.commons:commons-csv:1.10.0")
     implementation("org.apache.commons:commons-lang3:3.13.0")
     implementation("org.apache.commons:commons-text:1.10.0")
@@ -858,8 +858,8 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
     implementation("it.skrape:skrapeit-html-parser:1.3.0-alpha.1")
     implementation("it.skrape:skrapeit-http-fetcher:1.3.0-alpha.1")
-    implementation("org.apache.poi:poi:5.2.3")
-    implementation("org.apache.poi:poi-ooxml:5.2.3")
+    implementation("org.apache.poi:poi:5.2.4")
+    implementation("org.apache.poi:poi-ooxml:5.2.4")
     implementation("commons-io:commons-io: 2.13.0")
     implementation("com.anyascii:anyascii:0.3.2")
 // force jsoup since skrapeit-html-parser@1.2.1+ has not updated
