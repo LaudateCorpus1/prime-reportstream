@@ -811,7 +811,7 @@ dependencies {
     }
     implementation("org.yaml:snakeyaml:2.0")
     implementation("io.github.linuxforhealth:hl7v2-fhir-converter:1.0.19")
-    implementation("ca.uhn.hapi.fhir:hapi-fhir-structures-r4:6.6.2")
+    implementation("ca.uhn.hapi.fhir:hapi-fhir-structures-r4:6.8.3")
     implementation("ca.uhn.hapi:hapi-base:2.3")
     implementation("ca.uhn.hapi:hapi-structures-v251:2.3")
     implementation("com.googlecode.libphonenumber:libphonenumber:8.13.17")
