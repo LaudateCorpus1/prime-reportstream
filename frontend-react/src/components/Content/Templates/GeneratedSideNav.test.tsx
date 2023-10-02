@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 
-import { renderWithRouter } from "../../../utils/CustomRenderUtils";
+import { renderApp } from "../../../utils/CustomRenderUtils";
 import { MarkdownDirectory } from "../MarkdownDirectory";
 
 import GeneratedSideNav from "./GeneratedSideNav";
@@ -11,12 +11,12 @@ const TEST_DIRS = [
 ];
 
 test("GeneratedSideNav", () => {
-    renderWithRouter(<GeneratedSideNav directories={TEST_DIRS} />);
+    renderApp(<GeneratedSideNav directories={TEST_DIRS} />);
     expect(screen.getByText("Test Dir")).toBeInTheDocument();
     expect(screen.getByText("Test Dir")).toHaveAttribute("href", "/test-dir");
     expect(screen.getByText("Another Dir")).toBeInTheDocument();
     expect(screen.getByText("Another Dir")).toHaveAttribute(
         "href",
-        "/another-dir"
+        "/another-dir",
     );
 });
