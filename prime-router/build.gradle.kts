@@ -107,7 +107,7 @@ defaultTasks("package")
 
 val ktorVersion = "2.3.3"
 val kotlinVersion = "1.9.0"
-val jacksonVersion = "2.15.2"
+val jacksonVersion = "2.15.3"
 
 jacoco.toolVersion = "0.8.9"
 
