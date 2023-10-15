@@ -36,7 +36,7 @@ plugins {
     kotlin("jvm") version "1.9.0"
     id("nu.studer.jooq") version "8.2.1"
     id("com.microsoft.azure.azurefunctions") version "1.13.0"
-    id("com.adarshr.test-logger") version "3.2.0"
+    id("com.adarshr.test-logger") version "4.0.0"
     id("jacoco")
     id("org.jetbrains.dokka") version "1.8.20"
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.0"
