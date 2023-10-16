@@ -6,6 +6,7 @@ import ca.uhn.hl7v2.model.Message
 import ca.uhn.hl7v2.model.v251.segment.MSH
 import ca.uhn.hl7v2.util.Hl7InputStreamMessageIterator
 import ca.uhn.hl7v2.util.Hl7InputStreamMessageStringIterator
+import ca.uhn.hl7v2.util.Terser
 import ca.uhn.hl7v2.validation.ValidationException
 import gov.cdc.prime.router.ActionLogger
 import gov.cdc.prime.router.InvalidReportMessage
@@ -45,6 +46,15 @@ class HL7Reader(private val actionLogger: ActionLogger) : Logging {
     }
 
     /**
+     * Takes a [rawMessage] and the number of messages [numMessages] in the rawMessage and determines if it is a batch
+     * or singular HL7 message. It will qualify as a batch message if it follows the HL7 standards and have the Hl7
+     * batch headers which start with "FHS" or if they left off the batch headers and just sent multiple messages
+     */
+    fun isBatch(rawMessage: String, numMessages: Int): Boolean {
+        return rawMessage.startsWith("FHS") || numMessages > 1
+    }
+
+    /**
      * Takes an [exception] thrown by the HL7 HAPI library, gets the root cause and logs the error into [actionLogger].
      * Sample error messages returned by the HAPI library are:
      *  Error Code = DATA_TYPE_ERROR-102: 'test' in record 3 is invalid for version 2.5.1
@@ -81,6 +91,38 @@ class HL7Reader(private val actionLogger: ActionLogger) : Logging {
             return if (!timestamp.isEmpty && !timestamp.ts1_Time.isEmpty) {
                 timestamp.ts1_Time.valueAsDate
             } else null
+        }
+
+        /**
+         * Get the type of the [message]
+         * @return the type of message ex. ORU
+         */
+        fun getMessageType(message: Message): String {
+            return (message["MSH"] as MSH).msh9_MessageType.msg1_MessageCode.toString()
+        }
+
+        /**
+         * Get the birthTime from the [message]
+         * @return the birthTime, if available or blank if not
+         */
+        fun getBirthTime(message: Message): String {
+            return try {
+                Terser(message).get("${getPatientPath(message)}/PID-7")
+            } catch (e: HL7Exception) {
+                ""
+            }
+        }
+
+        /**
+         * Get the path that is needed to retrieve the patient info, based on the type of the [hl7Message]
+         * @return the path for retrieving patient info
+         */
+        fun getPatientPath(hl7Message: Message): String? {
+            return when (getMessageType(hl7Message)) {
+                "ORM" -> "PATIENT"
+                "ORU" -> "PATIENT_RESULT/PATIENT"
+                else -> null
+            }
         }
     }
 }
