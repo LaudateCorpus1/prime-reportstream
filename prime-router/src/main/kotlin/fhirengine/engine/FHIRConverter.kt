@@ -16,12 +16,13 @@ import gov.cdc.prime.router.azure.db.Tables
 import gov.cdc.prime.router.azure.db.enums.TaskAction
 import gov.cdc.prime.router.azure.db.tables.pojos.ItemLineage
 import gov.cdc.prime.router.fhirengine.translation.HL7toFhirTranslator
+import gov.cdc.prime.router.fhirengine.translation.hl7.FhirTransformer
 import gov.cdc.prime.router.fhirengine.utils.FhirTranscoder
 import gov.cdc.prime.router.fhirengine.utils.HL7Reader
 import org.hl7.fhir.r4.model.Bundle
 
 /**
- * Process a [message] off of the raw-elr azure queue, convert it into FHIR, and store for next step.
+ * Process a message off of the raw-elr azure queue, convert it into FHIR, and store for next step.
  * [metadata] mockable metadata
  * [settings] mockable settings
  * [db] mockable database access
@@ -38,7 +39,7 @@ class FHIRConverter(
 
     /**
      * Accepts a [message] in either HL7 or FHIR format
-     * HL7 messages will be converted into FHIR
+     * HL7 messages will be converted into FHIR.
      * FHIR messages will be decoded and saved
      *
      * [message] is the incoming message to be turned into FHIR and saved
@@ -53,24 +54,31 @@ class FHIRConverter(
         logger.trace("Processing $format data for FHIR conversion.")
         val fhirBundles = when (format) {
             Report.Format.HL7, Report.Format.HL7_BATCH -> getContentFromHL7(message, actionLogger)
-            Report.Format.FHIR -> getContentFromFHIR(message)
+            Report.Format.FHIR -> getContentFromFHIR(message, actionLogger)
             else -> throw NotImplementedError("Invalid format $format ")
         }
 
         if (fhirBundles.isNotEmpty()) {
             logger.debug("Generated ${fhirBundles.size} FHIR bundles.")
             actionHistory.trackExistingInputReport(message.reportId)
+            val transformer = getTransformerFromSchema(message.schemaName)
             // operate on each fhir bundle
+            var bundleIndex = 1
+            val messagesToSend = mutableListOf<RawSubmission>()
             for (bundle in fhirBundles) {
+                // conduct FHIR Transform
+                transformer?.transform(bundle)
+
                 // make a 'report'
                 val report = Report(
                     Report.Format.FHIR,
                     emptyList(),
-                    fhirBundles.size,
+                    1,
                     itemLineage = listOf(
                         ItemLineage()
                     ),
-                    metadata = this.metadata
+                    metadata = this.metadata,
+                    topic = message.topic,
                 )
 
                 // create item lineage
@@ -78,7 +86,7 @@ class FHIRConverter(
                     ItemLineage(
                         null,
                         message.reportId,
-                        1,
+                        bundleIndex++,
                         report.id,
                         1,
                         null,
@@ -93,8 +101,8 @@ class FHIRConverter(
                     Event.EventAction.ROUTE,
                     report.id,
                     Options.None,
-                    emptyMap<String, String>(),
-                    emptyList<String>()
+                    emptyMap(),
+                    emptyList()
                 )
 
                 // upload to blobstore
@@ -128,18 +136,36 @@ class FHIRConverter(
                     null
                 )
 
-                // move to routing (send to <elrRoutingQueueName> queue)
-                this.queue.sendMessage(
-                    elrRoutingQueueName,
+                messagesToSend.add(
                     RawSubmission(
                         report.id,
                         blobInfo.blobUrl,
                         BlobAccess.digestToString(blobInfo.digest),
-                        message.blobSubFolderName
-                    ).serialize()
+                        message.blobSubFolderName,
+                        message.topic
+                    )
+                )
+            }
+            messagesToSend.forEach {
+                this.queue.sendMessage(
+                    elrRoutingQueueName,
+                    it.serialize(),
+                    this.queueVisibilityTimeout
                 )
             }
         }
+    }
+
+    /**
+     * Loads a transformer schema with [schemaName] and returns it.
+     * Returns null if [schemaName] is the empty string.
+     * Using this function instead of calling the constructor directly simplifies the process of mocking the
+     * transformer in tests.
+     */
+    fun getTransformerFromSchema(schemaName: String): FhirTransformer? {
+        return if (schemaName.isNotBlank()) {
+            FhirTransformer(schemaName)
+        } else null
     }
 
     /**
@@ -173,14 +199,15 @@ class FHIRConverter(
     }
 
     /**
-     * Decodes a FHIR [message] and returns it as list of bundles
-     *
+     * Decodes a FHIR [message] into FHIR bundles and keeps track of any validation
+     * errors when reading the message into [actionLogger]
      * @return a list containing a FHIR bundle
      */
     internal fun getContentFromFHIR(
-        message: RawSubmission
+        message: RawSubmission,
+        actionLogger: ActionLogger
     ): List<Bundle> {
-        return listOf(FhirTranscoder.decode(message.downloadContent()))
+        return FhirTranscoder.getBundles(message.downloadContent(), actionLogger)
     }
 
     /**
