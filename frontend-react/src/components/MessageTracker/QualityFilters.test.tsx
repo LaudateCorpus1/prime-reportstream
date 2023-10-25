@@ -1,4 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
+
+import { renderApp } from "../../utils/CustomRenderUtils";
 
 import { QualityFilters } from "./QualityFilters";
 
@@ -36,7 +38,7 @@ describe("QualityFilters component", () => {
                 },
             },
         ];
-        render(<QualityFilters qualityFilters={qualityFilters} />);
+        renderApp(<QualityFilters qualityFilters={qualityFilters} />);
 
         expect(screen.getByText(/Quality Filters:/)).toBeInTheDocument();
 
@@ -49,12 +51,12 @@ describe("QualityFilters component", () => {
         const firstRow = await within(rows[0]).findByRole("cell");
         expect(firstRow).toBeInTheDocument();
         expect(firstRow).toHaveTextContent(
-            "For ak-phd.elr, filter isValidCLIA[testing_lab_clia, reporting_facility_clia] filtered out item Alaska1"
+            "For ak-phd.elr, filter isValidCLIA[testing_lab_clia, reporting_facility_clia] filtered out item Alaska1",
         );
         const secondRow = await within(rows[1]).findByRole("cell");
         expect(secondRow).toBeInTheDocument();
         expect(secondRow).toHaveTextContent(
-            "For ak-phd.elr, filter isValidCLIA[testing_lab_clia, reporting_facility_clia] filtered out item Alaska2"
+            "For ak-phd.elr, filter isValidCLIA[testing_lab_clia, reporting_facility_clia] filtered out item Alaska2",
         );
     });
 });
