@@ -845,7 +845,7 @@ dependencies {
     implementation("commons-net:commons-net:3.9.0")
     implementation("com.cronutils:cron-utils:9.2.1")
     implementation("io.jsonwebtoken:jjwt-api:0.11.5")
-    implementation("de.m3y.kformat:kformat:0.9")
+    implementation("de.m3y.kformat:kformat:0.10")
     implementation("io.github.java-diff-utils:java-diff-utils:4.12")
     implementation("io.ktor:ktor-client-core:$ktorVersion")
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
