@@ -63,7 +63,7 @@ export interface SourceMapResult {
  */
 export const jsonSourceMap = (
     jsonD: unknown,
-    spaces: number = 2
+    spaces: number = 2,
 ): SourceMapResult => {
     // left and right should be json objects, but there's really no way to typescript enforce it.
     if (typeof jsonD === "string") {
@@ -248,7 +248,7 @@ export const jsonSourceMap = (
                 }
                 break;
             default:
-                console.log("unknown type");
+                console.error("unknown type");
         }
         map(ptr, "valueEnd");
     };
