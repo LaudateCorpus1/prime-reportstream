@@ -813,7 +813,7 @@ dependencies {
     implementation("io.github.linuxforhealth:hl7v2-fhir-converter:1.0.19")
     implementation("ca.uhn.hapi.fhir:hapi-fhir-structures-r4:6.6.2")
     implementation("ca.uhn.hapi:hapi-base:2.3")
-    implementation("ca.uhn.hapi:hapi-structures-v251:2.3")
+    implementation("ca.uhn.hapi:hapi-structures-v251:2.5.1")
     implementation("com.googlecode.libphonenumber:libphonenumber:8.13.17")
     implementation("org.thymeleaf:thymeleaf:3.1.2.RELEASE")
     implementation("com.sendgrid:sendgrid-java:4.9.3")
