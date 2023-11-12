@@ -816,7 +816,7 @@ dependencies {
     implementation("ca.uhn.hapi:hapi-structures-v251:2.3")
     implementation("com.googlecode.libphonenumber:libphonenumber:8.13.17")
     implementation("org.thymeleaf:thymeleaf:3.1.2.RELEASE")
-    implementation("com.sendgrid:sendgrid-java:4.9.3")
+    implementation("com.sendgrid:sendgrid-java:4.10.0")
     implementation("com.okta.jwt:okta-jwt-verifier:0.5.7")
     implementation("com.github.kittinunf.fuel:fuel:2.3.1") {
         exclude(group = "org.json", module = "json")
