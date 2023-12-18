@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { AccessToken } from "@okta/okta-auth-js";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 
 import { RSEndpoint, AxiosOptionsWithSegments } from "../config/endpoints";
 import { RSNetworkError } from "../utils/RSNetworkError";
@@ -10,7 +10,7 @@ import { MembershipSettings } from "./UseOktaMemberships";
 
 export type AuthorizedFetcher<T> = (
     EndpointConfig: RSEndpoint,
-    options?: Partial<AxiosOptionsWithSegments>
+    options?: Partial<AxiosOptionsWithSegments>,
 ) => Promise<T>;
 
 // this wrapper is needed to allow typing of the fetch return value from the location
@@ -24,7 +24,7 @@ export type AuthorizedFetchTypeWrapper = <T>() => AuthorizedFetcher<T>;
 //    a function that can be used to make an API call
 function createTypeWrapperForAuthorizedFetch(
     oktaToken: Partial<AccessToken>,
-    activeMembership: MembershipSettings
+    activeMembership: MembershipSettings,
 ) {
     const authHeaders = {
         ...getAppInsightsHeaders(),
@@ -35,29 +35,22 @@ function createTypeWrapperForAuthorizedFetch(
 
     return async function <T>(
         EndpointConfig: RSEndpoint,
-        options: Partial<AxiosOptionsWithSegments> = {}
+        options: Partial<AxiosOptionsWithSegments> = {},
     ): Promise<T> {
         const headerOverrides = options?.headers || {};
         const headers = { ...authHeaders, ...headerOverrides };
-        // this system assumes that we want to be making authenticated
-        // requests whenever possible
-        if (!headers.authorization || headers.authorization.length < 8) {
-            console.warn(
-                `Unauthenticated request to '${EndpointConfig.url}'\n Options:`,
-                options,
-                `\n Endpoint: `,
-                EndpointConfig
-            );
-        }
+
         const axiosConfig = EndpointConfig.toAxiosConfig({
             ...options,
             headers,
         });
-        return axios(axiosConfig)
-            .then(({ data }) => data)
-            .catch((e: any) => {
-                throw new RSNetworkError(e.message, e.response);
-            });
+
+        try {
+            const res = await axios(axiosConfig);
+            return res.data;
+        } catch (e: any) {
+            throw new RSNetworkError<T>(e as AxiosError<T>);
+        }
     };
 }
 
@@ -69,15 +62,15 @@ export const auxExports = {
 
 export const useCreateFetch = (
     oktaToken: Partial<AccessToken>,
-    activeMembership: MembershipSettings
+    activeMembership: MembershipSettings,
 ): AuthorizedFetchTypeWrapper => {
     const generator = useCallback(
         () =>
             auxExports.createTypeWrapperForAuthorizedFetch(
                 oktaToken as Partial<AccessToken>,
-                activeMembership as MembershipSettings
+                activeMembership as MembershipSettings,
             ),
-        [oktaToken, activeMembership]
+        [oktaToken, activeMembership],
     );
 
     return generator;
