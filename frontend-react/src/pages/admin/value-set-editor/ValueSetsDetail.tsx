@@ -5,7 +5,7 @@ import React, {
     useMemo,
     useEffect,
 } from "react";
-import { Helmet } from "react-helmet";
+import { Helmet } from "react-helmet-async";
 import { useParams } from "react-router-dom";
 import { ReactNode } from "react-markdown/lib/react-markdown";
 
@@ -24,7 +24,7 @@ import {
     LookupTable,
     ValueSetRow,
 } from "../../../config/endpoints/lookupTables";
-import { StaticAlert } from "../../../components/StaticAlert";
+import { StaticAlert, StaticAlertType } from "../../../components/StaticAlert";
 import {
     handleErrorWithAlert,
     ReportStreamAlert,
@@ -86,7 +86,7 @@ const ValueSetsDetailHeader = ({
 const prepareRowsForSave = (
     row: TableRowData | null,
     allRows: SenderAutomationDataRow[],
-    valueSetName: string
+    valueSetName: string,
 ): ValueSetRow[] => {
     if (row === null) {
         throw new Error("A null row was encountered in saveData");
@@ -112,7 +112,7 @@ const prepareRowsForSave = (
             display: set.display,
             code: set.code,
             version: set.version,
-        })
+        }),
     );
 
     return strippedArray;
@@ -154,7 +154,7 @@ export const ValueSetsDetailTable = ({
 
     const valueSetsWithIds = useMemo(
         () => addIdsToRows(valueSetData),
-        [valueSetData]
+        [valueSetData],
     );
 
     const tableConfig: TableConfig = useMemo(
@@ -162,7 +162,7 @@ export const ValueSetsDetailTable = ({
             columns: valueSetDetailColumnConfig,
             rows: valueSetsWithIds,
         }),
-        [valueSetsWithIds]
+        [valueSetsWithIds],
     );
 
     const datasetActionItem: DatasetAction = {
@@ -184,7 +184,7 @@ export const ValueSetsDetailTable = ({
                     const dataToSave = prepareRowsForSave(
                         row,
                         valueSetsWithIds,
-                        valueSetName
+                        valueSetName,
                     );
                     const saveResponse = await saveData({
                         data: dataToSave,
@@ -218,7 +218,7 @@ const ValueSetsDetailContent = () => {
 
     const readableName = useMemo(
         () => toHumanReadable(valueSetName!!),
-        [valueSetName]
+        [valueSetName],
     );
 
     return (
@@ -234,7 +234,7 @@ const ValueSetsDetailContent = () => {
                 {/* ONLY handles success messaging now */}
                 {alert && (
                     <StaticAlert
-                        type={alert.type}
+                        type={alert.type as StaticAlertType}
                         heading={alert.type.toUpperCase()}
                         message={alert.message}
                     />
