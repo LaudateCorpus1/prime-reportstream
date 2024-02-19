@@ -14,6 +14,7 @@ import { jsonSortReplacer } from "../../utils/JsonSortReplacer";
 import {
     getErrorDetailFromResponse,
     getVersionWarning,
+    isValidServiceName,
     VersionWarningType,
 } from "../../utils/misc";
 import { ObjectTooltip } from "../tooltips/ObjectTooltip";
@@ -25,6 +26,7 @@ import { ModalConfirmDialog, ModalConfirmRef } from "../ModalConfirmDialog";
 import { getAppInsightsHeaders } from "../../TelemetryService";
 
 import {
+    CheckboxComponent,
     DropdownComponent,
     TextAreaComponent,
     TextInputComponent,
@@ -52,7 +54,7 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
 
     const orgSenderSettings: OrgSenderSettingsResource = useResource(
         OrgSenderSettingsResource.detail(),
-        { orgname, sendername: sendername }
+        { orgname, sendername: sendername },
     );
 
     const [orgSenderSettingsOldJson, setOrgSenderSettingsOldJson] =
@@ -82,7 +84,7 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
 
             showAlertNotification(
                 "success",
-                `Item '${deleteItemId}' has been deleted`
+                `Item '${deleteItemId}' has been deleted`,
             );
 
             // navigate back to list since this item was just deleted
@@ -91,7 +93,7 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
         } catch (e: any) {
             console.trace(e);
             showError(
-                `Deleting item '${deleteItemId}' failed. ${e.toString()}`
+                `Deleting item '${deleteItemId}' failed. ${e.toString()}`,
             );
             return false;
         }
@@ -109,7 +111,7 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
                     Authorization: `Bearer ${accessToken}`,
                     Organization: organization!,
                 },
-            }
+            },
         );
 
         return await response.json();
@@ -117,14 +119,21 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
 
     const ShowCompareConfirm = async () => {
         try {
+            const { name } = orgSenderSettings;
+
+            if (!isValidServiceName(name)) {
+                showError(`${name} cannot contain special characters.`);
+                return false;
+            }
+
             // fetch original version
             setLoading(true);
             const latestResponse = await getLatestSenderResponse();
             setOrgSenderSettingsOldJson(
-                JSON.stringify(latestResponse, jsonSortReplacer, 2)
+                JSON.stringify(latestResponse, jsonSortReplacer, 2),
             );
             setOrgSenderSettingsNewJson(
-                JSON.stringify(orgSenderSettings, jsonSortReplacer, 2)
+                JSON.stringify(orgSenderSettings, jsonSortReplacer, 2),
             );
 
             if (
@@ -133,7 +142,7 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
             ) {
                 showError(getVersionWarning(VersionWarningType.POPUP));
                 confirmModalRef?.current?.setWarning(
-                    getVersionWarning(VersionWarningType.FULL, latestResponse)
+                    getVersionWarning(VersionWarningType.FULL, latestResponse),
                 );
                 confirmModalRef?.current?.disableSave();
             }
@@ -145,7 +154,7 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
             let errorDetail = await getErrorDetailFromResponse(e);
             console.trace(e, errorDetail);
             showError(
-                `Reloading sender '${sendername}' failed with: ${errorDetail}`
+                `Reloading sender '${sendername}' failed with: ${errorDetail}`,
             );
             return false;
         }
@@ -167,11 +176,11 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
             if (latestResponse.version !== orgSenderSettings?.version) {
                 // refresh left-side panel in compare modal to make it obvious what has changed
                 setOrgSenderSettingsOldJson(
-                    JSON.stringify(latestResponse, jsonSortReplacer, 2)
+                    JSON.stringify(latestResponse, jsonSortReplacer, 2),
                 );
                 showError(getVersionWarning(VersionWarningType.POPUP));
                 confirmModalRef?.current?.setWarning(
-                    getVersionWarning(VersionWarningType.FULL, latestResponse)
+                    getVersionWarning(VersionWarningType.FULL, latestResponse),
                 );
                 confirmModalRef?.current?.disableSave();
                 return false;
@@ -187,12 +196,12 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
                 // due to the endpoint being an 'upsert' (PUT) instead of the expected 'insert' (POST)
                 OrgSenderSettingsResource.update(),
                 { orgname, sendername: sendernamelocal },
-                data
+                data,
             );
 
             showAlertNotification(
                 "success",
-                `Item '${sendernamelocal}' has been saved`
+                `Item '${sendernamelocal}' has been saved`,
             );
             confirmModalRef?.current?.toggleModal(undefined, false);
             setLoading(false);
@@ -202,7 +211,7 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
             let errorDetail = await getErrorDetailFromResponse(e);
             console.trace(e, errorDetail);
             showError(
-                `Updating sender '${sendername}' failed with: ${errorDetail}`
+                `Updating sender '${sendername}' failed with: ${errorDetail}`,
             );
             return false;
         }
@@ -261,6 +270,12 @@ const EditSenderSettingsForm: React.FC<EditSenderSettingsFormProps> = ({
                     defaultvalue={orgSenderSettings.processingType}
                     savefunc={(v) => (orgSenderSettings.processingType = v)}
                     valuesFrom={"processingType"}
+                />
+                <CheckboxComponent
+                    fieldname="allowDuplicates"
+                    label="Allow Duplicates"
+                    defaultvalue={orgSenderSettings.allowDuplicates}
+                    savefunc={(v) => (orgSenderSettings.allowDuplicates = v)}
                 />
                 <Grid row className="margin-top-2">
                     <Grid col={6}>
