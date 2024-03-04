@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react-hooks";
+import { renderHook } from "@testing-library/react";
 
 import {
     Organizations,
@@ -8,14 +8,14 @@ import {
 describe("useAdminSafeOrganizationName", () => {
     test("returns correct client organization", () => {
         const { result } = renderHook(() =>
-            useAdminSafeOrganizationName("testOrg")
+            useAdminSafeOrganizationName("testOrg"),
         );
         expect(result.current).toEqual("testOrg");
     });
 
     test("returns correct client organization for prime admins", () => {
         const { result } = renderHook(() =>
-            useAdminSafeOrganizationName(Organizations.PRIMEADMINS)
+            useAdminSafeOrganizationName(Organizations.PRIMEADMINS),
         );
         expect(result.current).toEqual(Organizations.IGNORE);
     });
