@@ -7,11 +7,11 @@ import {
     Label,
     TextInput,
 } from "@trussworks/react-uswds";
+import { Helmet } from "react-helmet-async";
 
 import { showAlertNotification } from "../../components/AlertNotifications";
 import { MemberType } from "../../hooks/UseOktaMemberships";
 import { AuthElement } from "../../components/AuthElement";
-import { BasicHelmet } from "../../components/header/BasicHelmet";
 import {
     FeatureFlagActionType,
     useFeatureFlags,
@@ -22,9 +22,6 @@ const { DEFAULT_FEATURE_FLAGS } = config;
 
 export enum FeatureFlagName {
     FOR_TEST = "for-tests-only",
-    NUMBERED_PAGINATION = "numbered-pagination",
-    USER_UPLOAD = "user-upload",
-    MESSAGE_TRACKER = "message-tracker",
 }
 
 export function FeatureFlagUIComponent() {
@@ -38,7 +35,7 @@ export function FeatureFlagUIComponent() {
             // already added.
             showAlertNotification(
                 "info",
-                `Item '${newFlag}' is already a feature flag.`
+                `Item '${newFlag}' is already a feature flag.`,
             );
             return;
         }
@@ -52,7 +49,7 @@ export function FeatureFlagUIComponent() {
         }
         showAlertNotification(
             "success",
-            `Feature flag '${newFlag}' added. You will now see UI related to this feature.`
+            `Feature flag '${newFlag}' added. You will now see UI related to this feature.`,
         );
     }, [newFlagInputText, checkFlag, dispatch]);
     const deleteFlagClick = useCallback(
@@ -62,12 +59,14 @@ export function FeatureFlagUIComponent() {
                 payload: flagname,
             });
         },
-        [dispatch]
+        [dispatch],
     );
 
     return (
         <>
-            <BasicHelmet pageTitle="Feature Flags" />
+            <Helmet>
+                <title>Feature Flags</title>
+            </Helmet>
             <section className="grid-container margin-top-0">
                 <h3>List of feature flags</h3>
                 <GridContainer containerSize="desktop">
@@ -88,7 +87,6 @@ export function FeatureFlagUIComponent() {
                             key="add-feature-flag"
                             type="button"
                             outline
-                            size="small"
                             className="padding-bottom-1 padding-top-1"
                             onClick={() => addFlagClick()}
                         >
@@ -103,13 +101,18 @@ export function FeatureFlagUIComponent() {
                                 className="margin-top-3"
                                 key={`feature-flag-${i}`}
                             >
-                                <Alert type="success" slim noIcon className="">
+                                <Alert
+                                    headingLevel="h4"
+                                    type="success"
+                                    slim
+                                    noIcon
+                                    className=""
+                                >
                                     <b>{flagname}</b>
                                     {DEFAULT_FEATURE_FLAGS.indexOf(flagname) ===
                                         -1 && (
                                         <Button
                                             key={flagname}
-                                            size="small"
                                             className="padding-bottom-1 padding-top-1 float-right"
                                             type="button"
                                             outline
