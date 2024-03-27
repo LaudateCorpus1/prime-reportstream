@@ -3,7 +3,6 @@ package gov.cdc.prime.router
 import ca.uhn.hl7v2.model.Message
 import ca.uhn.hl7v2.model.v251.segment.MSH
 import gov.cdc.prime.router.Report.Format
-import gov.cdc.prime.router.ReportStreamFilterDefinition.Companion.logger
 import gov.cdc.prime.router.azure.ActionHistory
 import gov.cdc.prime.router.azure.BlobAccess
 import gov.cdc.prime.router.azure.Event
@@ -67,7 +66,7 @@ abstract class SubmissionReceiver(
             val generatedHashes = mutableListOf<String>()
             val duplicateIndexes = mutableListOf<Int>()
             for (rowNum in 0 until report.itemCount) {
-                var itemHash = report.getItemHashForRow(rowNum)
+                val itemHash = report.getItemHashForRow(rowNum)
                 // check for duplicate item
                 val isDuplicate = generatedHashes.contains(itemHash) ||
                     workflowEngine.isDuplicateItem(itemHash)
@@ -114,7 +113,7 @@ abstract class SubmissionReceiver(
 
         /**
          * Determines what type of submission receiver to use based on [sender]
-         * Creates a new SubmissionReceiver using the given the [workflowEngine] and [actionHistory]
+         * Creates a new SubmissionReceiver using the given [workflowEngine] and [actionHistory]
          * @return Returns either a TopicReceiver or ELRReceiver based on the sender
          */
         internal fun getSubmissionReceiver(
@@ -125,7 +124,7 @@ abstract class SubmissionReceiver(
             val receiver by lazy {
                 when (sender) {
                     is CovidSender, is MonkeypoxSender -> TopicReceiver(workflowEngine, actionHistory)
-                    else -> ELRReceiver(workflowEngine, actionHistory)
+                    else -> UniversalPipelineReceiver(workflowEngine, actionHistory)
                 }
             }
             return receiver
@@ -156,7 +155,11 @@ class TopicReceiver : SubmissionReceiver {
         metadata: Metadata?
     ) {
         // parse, check for parse errors
-        val (report, actionLogs) = this.workflowEngine.parseTopicReport(sender as TopicSender, content, defaults)
+        val (report, actionLogs) = this.workflowEngine.parseTopicReport(
+            sender as LegacyPipelineSender,
+            content,
+            defaults
+        )
 
         // prevent duplicates if configured to not allow them
         if (!allowDuplicates) {
@@ -237,9 +240,9 @@ class TopicReceiver : SubmissionReceiver {
 }
 
 /**
- * Receiver for Full ELR, contains logic to process full ELR submissions.
+ * Receiver for Universal Pipeline, contains logic to process Universal Pipeline submissions.
  */
-class ELRReceiver : SubmissionReceiver {
+class UniversalPipelineReceiver : SubmissionReceiver {
     constructor(
         workflowEngine: WorkflowEngine = WorkflowEngine(),
         actionHistory: ActionHistory = ActionHistory(TaskAction.receive)
@@ -257,23 +260,26 @@ class ELRReceiver : SubmissionReceiver {
         payloadName: String?,
         metadata: Metadata?
     ) {
+        check(sender is UniversalPipelineSender)
         val actionLogs = ActionLogger()
         val sources = listOf(ClientSource(organization = sender.organizationName, client = sender.name))
         // check that our input is valid HL7. Additional validation will happen at a later step
 
-        var report: Report
+        val report: Report
 
         when (sender.format) {
             Sender.Format.HL7 -> {
-                var messages = HL7Reader(actionLogs).getMessages(content)
+                val messages = HL7Reader(actionLogs).getMessages(content)
+                val isBatch = HL7Reader(actionLogs).isBatch(content, messages.size)
                 // create a Report for this incoming HL7 message to use for tracking in the database
 
                 report = Report(
-                    Format.HL7,
+                    if (isBatch) Format.HL7_BATCH else Format.HL7,
                     sources,
                     messages.size,
                     metadata = metadata,
-                    nextAction = TaskAction.convert
+                    nextAction = TaskAction.convert,
+                    topic = sender.topic,
                 )
 
                 // dupe detection if needed, and if we have not already produced an error
@@ -288,24 +294,19 @@ class ELRReceiver : SubmissionReceiver {
                 // check for valid message type
                 messages.forEachIndexed { idx, element -> checkValidMessageType(element, actionLogs, idx + 1) }
             }
+
             Sender.Format.FHIR -> {
-                try {
-                    val bundle = FhirTranscoder.decode(content)
-                    if (bundle.isEmpty) {
-                        actionLogs.error(InvalidReportMessage("Unable to find FHIR Bundle in provided data."))
-                    }
-                } catch (e: Exception) {
-                    logger.error(e)
-                    actionLogs.error(InvalidReportMessage("Unable to parse FHIR data."))
-                }
+                val bundles = FhirTranscoder.getBundles(content, actionLogs)
                 report = Report(
                     Format.FHIR,
                     sources,
-                    1,
+                    bundles.size,
                     metadata = metadata,
-                    nextAction = TaskAction.convert
+                    nextAction = TaskAction.convert,
+                    topic = sender.topic,
                 )
             }
+
             else -> {
                 throw IllegalStateException("Unexpected sender format ${sender.format}")
             }
@@ -349,10 +350,17 @@ class ELRReceiver : SubmissionReceiver {
                     report.id,
                     blobInfo.blobUrl,
                     BlobAccess.digestToString(blobInfo.digest),
-                    sender.fullName
+                    sender.fullName,
+                    sender.topic,
+                    sender.schemaName,
                 ).serialize()
             )
         }
+    }
+
+    enum class MessageType {
+        ORU_R01,
+        ORM_O01
     }
 
     /**
@@ -368,7 +376,7 @@ class ELRReceiver : SubmissionReceiver {
 
         // TODO: This may need to be a configurable value in the future, if we ever support message types other
         //  than ORU_RO1. As of 6/15/2022 multiple message type support is out of scope
-        if (messageType != "ORU_R01") {
+        if (messageType != MessageType.ORU_R01.toString() && messageType != MessageType.ORM_O01.toString()) {
             actionLogs.getItemLogger(itemIndex)
                 .error(InvalidHL7Message("Ignoring unsupported HL7 message type $messageType"))
         }
