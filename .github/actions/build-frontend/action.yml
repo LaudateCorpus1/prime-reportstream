@@ -65,7 +65,7 @@ runs:
         distribution: "adopt"
         cache: "gradle"
 
-    - uses: gradle/wrapper-validation-action@56b90f209b02bf6d1deae490e9ef18b21a389cd4
+    - uses: gradle/wrapper-validation-action@b231772637bb498f11fdbc86052b6e8a8dc9fc92
       if: github.actor != 'dependabot[bot]'
 
     - name: Spin up build containers
