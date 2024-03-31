@@ -34,7 +34,7 @@ plugins {
     id("com.github.johnrengelman.shadow") version "8.1.1"
     id("org.flywaydb.flyway") version "9.21.1"
     kotlin("jvm") version "1.9.0"
-    id("nu.studer.jooq") version "8.2.1"
+    id("nu.studer.jooq") version "9.0"
     id("com.microsoft.azure.azurefunctions") version "1.13.0"
     id("com.adarshr.test-logger") version "3.2.0"
     id("jacoco")
