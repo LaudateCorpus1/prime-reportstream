@@ -892,7 +892,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.0")
     testImplementation("com.willowtreeapps.assertk:assertk-jvm:0.26.1")
     testImplementation("io.ktor:ktor-client-mock:$ktorVersion")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.0")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
     testImplementation("org.testcontainers:testcontainers:1.18.3")
     testImplementation("org.testcontainers:junit-jupiter:1.18.3")
