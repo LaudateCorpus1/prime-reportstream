@@ -772,7 +772,7 @@ configurations {
 }
 
 dependencies {
-    jooqGenerator("org.postgresql:postgresql:42.6.0")
+    jooqGenerator("org.postgresql:postgresql:42.7.3")
 
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-common:$kotlinVersion")
@@ -832,7 +832,7 @@ dependencies {
     implementation("org.apache.commons:commons-text:1.10.0")
     implementation("commons-codec:commons-codec:1.16.0")
     implementation("commons-io:commons-io:2.13.0")
-    implementation("org.postgresql:postgresql:42.6.0")
+    implementation("org.postgresql:postgresql:42.7.3")
     implementation("com.zaxxer:HikariCP:5.0.1")
     implementation("org.flywaydb:flyway-core:9.21.1")
     implementation("org.commonmark:commonmark:0.21.0")
