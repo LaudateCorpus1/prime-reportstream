@@ -874,7 +874,7 @@ dependencies {
     // https://mvnrepository.com/artifact/javax.annotation/javax.annotation-api
     implementation("javax.annotation:javax.annotation-api:1.3.2")
 
-    runtimeOnly("com.okta.jwt:okta-jwt-verifier-impl:0.5.7")
+    runtimeOnly("com.okta.jwt:okta-jwt-verifier-impl:0.5.8")
     runtimeOnly("com.github.kittinunf.fuel:fuel-jackson:2.3.1")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.11.5")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
