@@ -2,8 +2,9 @@ import { MatcherFunction, screen } from "@testing-library/react";
 
 import ActionDetailsResource from "../../resources/ActionDetailsResource";
 import { ResponseType, TestResponse } from "../../resources/TestResponse";
-import { renderWithRouter } from "../../utils/CustomRenderUtils";
+import { renderApp } from "../../utils/CustomRenderUtils";
 import { DetailItem } from "../../components/DetailItem/DetailItem";
+import { FeatureName } from "../../AppRouter";
 
 import SubmissionDetails, { DestinationItem } from "./SubmissionDetails";
 
@@ -19,9 +20,10 @@ const timeRegex: RegExp = /\d{1,2}:\d{2}/;
     limitation for us that doesn't allow us to test negative cases.
 */
 const mockData: ActionDetailsResource = new TestResponse(
-    ResponseType.ACTION_DETAIL
+    ResponseType.ACTION_DETAIL,
 ).data;
 jest.mock("rest-hooks", () => ({
+    ...jest.requireActual("rest-hooks"),
     useResource: () => {
         return mockData;
     },
@@ -33,13 +35,13 @@ jest.mock("rest-hooks", () => ({
 
 describe("SubmissionDetails", () => {
     beforeEach(() => {
-        renderWithRouter(<SubmissionDetails />);
+        renderApp(<SubmissionDetails />);
     });
 
     test("renders crumb nav to Submissions list", () => {
         const submissionCrumb = screen.getByRole("link");
         expect(submissionCrumb).toBeInTheDocument();
-        expect(submissionCrumb).toHaveTextContent("Submissions");
+        expect(submissionCrumb).toHaveTextContent(FeatureName.SUBMISSIONS);
     });
 
     test("renders without error", async () => {
@@ -58,15 +60,15 @@ describe("SubmissionDetails", () => {
 
         /* DestinationItem contents*/
         const receiverOrgNameAndService = await screen.findByText(
-            `${mockData.destinations[0].organization}`
+            `${mockData.destinations[0].organization}`,
         );
         const dataStream = await screen.findByText(
-            mockData.destinations[0].service.toUpperCase()
+            mockData.destinations[0].service.toUpperCase(),
         );
         const transmissionDate = await screen.findByText("7 Apr 1970");
         const transmissionTime = screen.getByText(findTimeWithoutDate);
         const recordsTransmitted = await screen.findByText(
-            mockData.destinations[0].itemCount
+            mockData.destinations[0].itemCount,
         );
 
         /*
@@ -99,9 +101,7 @@ describe("SubmissionDetails", () => {
 
 describe("DetailItem", () => {
     beforeEach(() => {
-        renderWithRouter(
-            <DetailItem item="Test Item" content="Test Content" />
-        );
+        renderApp(<DetailItem item="Test Item" content="Test Content" />);
     });
 
     test("renders content", () => {
@@ -112,8 +112,8 @@ describe("DetailItem", () => {
 
 describe("DestinationItem", () => {
     beforeEach(() => {
-        renderWithRouter(
-            <DestinationItem destinationObj={mockData.destinations[0]} />
+        renderApp(
+            <DestinationItem destinationObj={mockData.destinations[0]} />,
         );
     });
 
