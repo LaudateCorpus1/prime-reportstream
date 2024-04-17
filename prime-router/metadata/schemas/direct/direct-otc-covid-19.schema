@@ -1,4 +1,5 @@
 ---
+# deprecated
 name: direct-otc-covid-19
 description: Direct Schema for OTC Results based on NIH At-Home specs
 topic: covid-19
@@ -408,4 +409,6 @@ elements:
       csvFields: [{ name: symptomatic, format: $display}]
       default: ""
 
+############## These fields are calculated for filtering purposes
     - name: test_type
+    - name: abnormal_flag
