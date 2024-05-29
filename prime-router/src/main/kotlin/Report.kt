@@ -1,6 +1,10 @@
 package gov.cdc.prime.router
 
+import gov.cdc.prime.router.azure.ActionHistory
 import gov.cdc.prime.router.azure.BlobAccess
+import gov.cdc.prime.router.azure.Event
+import gov.cdc.prime.router.azure.ProcessEvent
+import gov.cdc.prime.router.azure.ReportEvent
 import gov.cdc.prime.router.azure.WorkflowEngine
 import gov.cdc.prime.router.azure.db.enums.TaskAction
 import gov.cdc.prime.router.azure.db.tables.pojos.CovidResultMetadata
@@ -73,7 +77,7 @@ enum class Options {
      * If the annotation is present, the constant is no longer in use.
      */
 
-    val isDeprecated = this.declaringClass.getField(this.name)
+    val isDeprecated = this.declaringJavaClass.getField(this.name)
         .getAnnotation(OptionDeprecated::class.java) != null
 
     companion object {
@@ -130,7 +134,7 @@ data class ReportStreamFilterResult(
     val filterType: ReportStreamFilterType?
 ) : ActionLogDetail {
     override val scope = ActionLogScope.translation
-    override val errorCode = ""
+    override val errorCode = ErrorCode.UNKNOWN
 
     companion object {
         // Use this value in logs and user-facing messages if the trackingElement is missing.
@@ -162,7 +166,7 @@ class Report : Logging {
         CSV_SINGLE("csv", "text/csv", true),
         HL7("hl7", "application/hl7-v2", true), // HL7 with one result per file
         HL7_BATCH("hl7", "application/hl7-v2"), // HL7 with BHS and FHS headers
-        FHIR("fhir", "application/fhir+json");
+        FHIR("fhir", "application/fhir+ndjson");
 
         companion object {
             // Default to CSV if weird or unknown
@@ -389,11 +393,12 @@ class Report : Logging {
         metadata: Metadata? = null,
         itemLineage: List<ItemLineage>? = null,
         destination: Receiver? = null,
-        nextAction: TaskAction = TaskAction.process
+        nextAction: TaskAction = TaskAction.process,
+        topic: Topic,
     ) {
         this.id = UUID.randomUUID()
-        // ELR submissions do not need a schema, but it is required by the database to maintain legacy functionality
-        this.schema = Schema("None", Topic.FULL_ELR)
+        // UP submissions do not need a schema, but it is required by the database to maintain legacy functionality
+        this.schema = Schema("None", topic)
         this.sources = sources
         this.bodyFormat = bodyFormat
         this.destination = destination
@@ -1623,6 +1628,97 @@ class Report : Logging {
         fun getFormatFromBlobURL(blobURL: String): Format {
             val extension = BlobAccess.BlobInfo.getBlobFileExtension(blobURL)
             return Format.valueOfFromExt(extension)
+        }
+
+        /**
+         * Takes [nextAction] and an [messageBody], convert it into a Report for the [receiver] specified with
+         * any passed in [metadata]. Uploads to blob storage. Adds lineage showing the newly generated report
+         * came from [sourceReportIds]. Tracks the generated report with the [actionHistory] provided.
+         * @return the newly generated Report, nextAction event, and blobInfo
+         */
+        fun generateReportAndUploadBlob(
+            nextAction: Event.EventAction,
+            messageBody: ByteArray,
+            sourceReportIds: List<ReportId>,
+            receiver: Receiver,
+            metadata: Metadata,
+            actionHistory: ActionHistory,
+            topic: Topic,
+        ): Triple<Report, Event, BlobAccess.BlobInfo> {
+            check(messageBody.isNotEmpty())
+            check(sourceReportIds.isNotEmpty())
+
+            // create report object
+            val sources = emptyList<Source>()
+            val reportFormat = when (receiver.format) {
+                Report.Format.HL7, Report.Format.HL7_BATCH -> {
+                    if (sourceReportIds.size > 1) Report.Format.HL7_BATCH
+                    else Report.Format.HL7
+                }
+                Report.Format.FHIR -> Report.Format.FHIR
+                else -> throw IllegalStateException("Unsupported receiver format ${receiver.format}")
+            }
+            val report = Report(
+                reportFormat,
+                sources,
+                sourceReportIds.size,
+                metadata = metadata,
+                destination = receiver,
+                topic = topic
+            )
+
+            // create item lineage
+            report.itemLineages = sourceReportIds.mapIndexed { sourceIndex, sourceReportId ->
+                ItemLineage(
+                    null,
+                    sourceReportId,
+                    1,
+                    report.id,
+                    sourceIndex + 1, // item indexes starts at 1
+                    null,
+                    null,
+                    null,
+                    "0" // Hash is only used for deduplication when receiving
+                )
+            }
+
+            // create batch event
+            // if timing is null, a batch event will be created, but it will never be picked up
+            val time = receiver.timing?.nextTime()
+            // this is hacky and needs to be fixed, but that would have to happen as part of a refactor
+            val event: Event =
+                if (nextAction == Event.EventAction.SEND) {
+                    ReportEvent(
+                        nextAction,
+                        report.id,
+                        false
+                    )
+                } else {
+                    ProcessEvent(
+                        nextAction,
+                        report.id,
+                        Options.None,
+                        emptyMap(),
+                        emptyList(),
+                        at = time
+                    )
+                }
+
+            // upload the translated copy to blobstore
+            val blobInfo = BlobAccess.uploadBody(
+                reportFormat,
+                messageBody,
+                report.name,
+                receiver.fullName,
+                event.eventAction
+            )
+            report.bodyURL = blobInfo.blobUrl
+            report.nextAction = event.eventAction.toTaskAction()
+
+            // track generated reports, one per receiver
+            actionHistory.trackCreatedReport(event, report, blobInfo)
+
+            return Triple(report, event, blobInfo)
         }
     }
 }
