@@ -212,7 +212,7 @@ runs:
           > /dev/null
       shell: bash
 
-    - uses: Azure/functions-container-action@0aec6197033a72d3ca813f1aebd9391f639c2a8f
+    - uses: Azure/functions-container-action@d5777471de891bf2d487f637c7563fa75e48101f
       id: deploy-candidate
       with:
         app-name: ${{ env.FUNCTION_APP }}
