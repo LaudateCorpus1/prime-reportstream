@@ -18,7 +18,7 @@ runs:
         echo >> $GITHUB_ENV DB_USER='prime'
         echo >> $GITHUB_ENV DB_PASSWORD='changeIT!'
 
-    - uses: gradle/wrapper-validation-action@56b90f209b02bf6d1deae490e9ef18b21a389cd4
+    - uses: gradle/wrapper-validation-action@88425854a36845f9c881450d9660b5fd46bee142
 
     - name: Spin up build containers
       working-directory: prime-router
