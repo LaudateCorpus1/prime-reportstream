@@ -1,5 +1,7 @@
 import React, { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { Button } from "@trussworks/react-uswds";
+
+import { USLink } from "../USLink";
 
 import { ColumnConfig, LinkableColumn, ActionableColumn } from "./Table";
 import { TableRowData } from "./TableRows";
@@ -15,7 +17,7 @@ export interface ColumnProps {
 
 const showMappedFieldValue = (
     columnConfig: ColumnConfig,
-    rowData: TableRowData
+    rowData: TableRowData,
 ) => {
     const rawFieldValue = rowData[columnConfig.dataAttr];
     if (columnConfig.valueMap) {
@@ -44,7 +46,7 @@ export const ColumnData = ({
     // Easy-to-read way to transform value
     const transform = (
         transformFunc: Function,
-        transformVal: string | number
+        transformVal: string | number,
     ) => {
         return transformFunc(transformVal);
     };
@@ -74,22 +76,23 @@ export const ColumnData = ({
         // Render column value as NavLink
         const feature = columnConfig?.feature as LinkableColumn;
         return tableData(
-            <NavLink
-                className="usa-link"
-                to={`${feature.linkBasePath || ""}${
+            <USLink
+                href={`${feature.linkBasePath || ""}${
                     rowData[feature.linkAttr || field]
                 }`}
+                state={feature.linkState || {}}
             >
                 {columnConfig.valueMap
                     ? showMappedFieldValue(columnConfig, rowData)
                     : displayValue}
-            </NavLink>
+            </USLink>,
         );
     }
 
     if (hasFeature("action")) {
         // Make column value actionable
-        const { action, param } = columnConfig.feature as ActionableColumn;
+        const { action, param, actionButtonHandler, actionButtonParam } =
+            columnConfig.feature as ActionableColumn;
 
         if (!rowData[param!!]) {
             console.warn(`The row attribute '${param}' could not be found`);
@@ -99,13 +102,29 @@ export const ColumnData = ({
             if (param) return action(rowData[param]);
             return action();
         };
+        const showActionButton = () => {
+            if (actionButtonHandler && actionButtonParam) {
+                return actionButtonHandler(rowData[actionButtonParam]);
+            } else {
+                return true;
+            }
+        };
+
         return tableData(
-            <button
-                className="usa-link bg-transparent border-transparent"
-                onClick={() => doAction()}
-            >
-                {displayValue}
-            </button>
+            <>
+                {showActionButton() ? (
+                    <Button
+                        className="font-mono-2xs line-height-alt-4"
+                        type="button"
+                        unstyled
+                        onClick={doAction}
+                    >
+                        {displayValue}
+                    </Button>
+                ) : (
+                    <div>{displayValue}</div>
+                )}
+            </>,
         );
     }
 
@@ -122,7 +141,7 @@ export const ColumnData = ({
                  * the same as the server-provided data, NOT the
                  * displayed data (in case of transformation/map) */
                 defaultValue={displayValue}
-            />
+            />,
         );
     }
 
