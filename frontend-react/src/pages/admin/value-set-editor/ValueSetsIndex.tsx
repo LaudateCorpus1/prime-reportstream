@@ -1,4 +1,5 @@
 import React from "react";
+import { Helmet } from "react-helmet-async";
 
 import Table, {
     ColumnConfig,
@@ -16,7 +17,6 @@ import {
 } from "../../../config/endpoints/lookupTables";
 import { MemberType } from "../../../hooks/UseOktaMemberships";
 import { AuthElement } from "../../../components/AuthElement";
-import { BasicHelmet } from "../../../components/header/BasicHelmet";
 import { withCatchAndSuspense } from "../../../components/RSErrorBoundary";
 
 export const Legend = ({ items }: { items: LegendItem[] }) => {
@@ -59,13 +59,13 @@ const valueSetColumnConfig: ColumnConfig[] = [
 
 const toValueSetWithMeta = (
     valueSetArray: ValueSet[] = [],
-    valueSetMeta: LookupTable
+    valueSetMeta: LookupTable,
 ) => valueSetArray.map((valueSet) => ({ ...valueSet, ...valueSetMeta }));
 
 const ValueSetsTable = () => {
     const { valueSetMeta } = useValueSetsMeta();
     const { valueSetArray } = useValueSetsTable<ValueSet[]>(
-        LookupTables.VALUE_SET
+        LookupTables.VALUE_SET,
     );
 
     const tableConfig: TableConfig = {
@@ -82,7 +82,9 @@ const ValueSetsTable = () => {
 const ValueSetsIndex = () => {
     return (
         <>
-            <BasicHelmet pageTitle="Value Sets | Admin" />
+            <Helmet>
+                <title>Value Sets | Admin</title>
+            </Helmet>
             <section className="grid-container">
                 {withCatchAndSuspense(<ValueSetsTable />)}
             </section>
