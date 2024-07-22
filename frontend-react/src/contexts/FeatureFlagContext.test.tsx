@@ -1,5 +1,4 @@
-import { render } from "@testing-library/react";
-
+import { renderApp } from "../utils/CustomRenderUtils";
 import {
     mockGetSavedFeatureFlags,
     mockStoreFeatureFlags,
@@ -13,8 +12,11 @@ import {
 } from "./FeatureFlagContext";
 
 jest.mock("../config", () => {
+    const originalModule = jest.requireActual("../config");
     return {
+        ...originalModule,
         default: {
+            ...originalModule.default,
             DEFAULT_FEATURE_FLAGS: ["flag-3"],
         },
         __esModule: true,
@@ -40,7 +42,7 @@ describe("featureFlagReducer", () => {
     test("adds feature flag correctly", () => {
         const result = featureFlagReducer(
             { featureFlags: [] },
-            { type: FeatureFlagActionType.ADD, payload: "NEW-flag  " }
+            { type: FeatureFlagActionType.ADD, payload: "NEW-flag  " },
         );
 
         expect(result).toEqual({ featureFlags: ["new-flag"] });
@@ -50,7 +52,7 @@ describe("featureFlagReducer", () => {
     test("does not duplciate feature flag if already present", () => {
         const result = featureFlagReducer(
             { featureFlags: ["new-flag"] },
-            { type: FeatureFlagActionType.ADD, payload: "new-FLAG    " }
+            { type: FeatureFlagActionType.ADD, payload: "new-FLAG    " },
         );
 
         expect(result).toEqual({ featureFlags: ["new-flag"] });
@@ -60,7 +62,7 @@ describe("featureFlagReducer", () => {
     test("removes feature flag correctly", () => {
         const result = featureFlagReducer(
             { featureFlags: ["new-flag"] },
-            { type: FeatureFlagActionType.REMOVE, payload: "new-FLAG    " }
+            { type: FeatureFlagActionType.REMOVE, payload: "new-FLAG    " },
         );
 
         expect(result).toEqual({ featureFlags: [] });
@@ -70,7 +72,7 @@ describe("featureFlagReducer", () => {
     test("does nothing if trying to remove a flag that is not present", () => {
         const result = featureFlagReducer(
             { featureFlags: ["new-flag"] },
-            { type: FeatureFlagActionType.REMOVE, payload: "old-flag" }
+            { type: FeatureFlagActionType.REMOVE, payload: "old-flag" },
         );
 
         expect(result).toEqual({ featureFlags: ["new-flag"] });
@@ -82,7 +84,7 @@ describe("FeatureFlagProvider", () => {
     const mockSavedFlags = ["flag-1", "flag-2"];
     beforeEach(() => {
         mockGetSavedFeatureFlags.mockReturnValue(mockSavedFlags);
-        render(<FeatureFlagProviderTestRenderer />);
+        renderApp(<FeatureFlagProviderTestRenderer />);
     });
     test("provides initial state with saved flags and env level flags", async () => {
         expect(providerValueMonitor).toHaveBeenCalledTimes(1);
