@@ -1,3 +1,4 @@
+#deprecated
 # One-off Schema for All-In-One-Health in California
 # This schema is to be used to parse the standard CSV from the Sender
 # Created by Rick Hood
@@ -341,3 +342,4 @@ elements:
       documentation: This field is ignored.
 
     - name: test_type
+    - name: abnormal_flag
